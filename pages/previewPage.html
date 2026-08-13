@@ -71,13 +71,23 @@
       }
 
       #previewWrapper {
-        transform-origin: left top;
+        /* 修改：缩放原点从默认中心改为左上角 (0,0)，便于与 translate 组合实现"以鼠标位置为中心缩放" */
+        transform-origin: 0 0;
         box-sizing: border-box;
         margin-top: 45px;
         position: absolute;
         top: 10px;
         left: 0px;
         right: 0px;
+        /* 修改：拖动支持——光标显示为可抓取手型 */
+        cursor: grab;
+        /* 修改：拖动时禁止文本选中，避免拖动过程中选中 SVG 内文字 */
+        user-select: none;
+      }
+
+      /* 修改：拖动过程中切换为"正在抓取"光标，提供视觉反馈 */
+      #previewWrapper.is-dragging {
+        cursor: grabbing;
       }
 
       #progressBar {
@@ -138,6 +148,20 @@
       var busyIndicator;
       var toast, toastMsg, toastList;
       var fitMode = true;
+      // 修改：拖动平移相关状态——记录画布相对原点的偏移量
+      var panX = 0;
+      var panY = 0;
+      // 修改：拖动状态机——isDragging 表示鼠标按下且未松开
+      var isDragging = false;
+      // 修改：拖动起点坐标（屏幕坐标），用于计算位移增量
+      var dragStartX = 0;
+      var dragStartY = 0;
+      // 修改：拖动开始时的 pan 基准值，配合 dragStart 计算新的 pan
+      var panStartX = 0;
+      var panStartY = 0;
+      // 修改：缩放锚点（鼠标在屏幕上的位置），用于实现"以鼠标位置为中心缩放"
+      var lastMouseX = 0;
+      var lastMouseY = 0;
       const vscode = acquireVsCodeApi();
 
       function init() {
@@ -148,43 +172,144 @@
         toast = document.getElementById("toast");
         toastMsg = document.getElementById("toastMsg");
         toastList = document.getElementById("toastList");
+        // 修改：拖动支持——必须在 init() 内注册，确保 wrapper 已被赋值，
+        // 否则顶层调用会因 wrapper 为 undefined 而抛 TypeError，导致整个 webview 脚本崩溃
+        wrapper.addEventListener("mousedown", (event) => {
+          // 只响应左键
+          if (event.button !== 0) return;
+          // 修改：若点中的是 <a> 链接则不启动拖动，避免误吞链接点击
+          if (event.target.closest && event.target.closest("a[href]")) return;
+          isDragging = true;
+          dragStartX = event.clientX;
+          dragStartY = event.clientY;
+          panStartX = panX;
+          panStartY = panY;
+          // 修改：加上 is-dragging class 切换为 grabbing 光标
+          wrapper.classList.add("is-dragging");
+          event.preventDefault();
+        });
+        // 修改：跟踪鼠标位置，Ctrl+滚轮缩放时用作 zoomTo 的锚点
+        wrapper.addEventListener("mousemove", (event) => {
+          lastMouseX = event.clientX;
+          lastMouseY = event.clientY;
+        });
         zoomFit();
+        // 修改：webview 上下文重置后（例如 move to new window），主动隐藏
+        // 初始 HTML 中写死的 "Loading..." 提示与进度条，避免脏状态残留
+        toast.style.opacity = 0;
+        busyIndicator.style.visibility = "hidden";
       }
-      function zoomPlus() {
+      // 修改：anchorX/anchorY 用于"以鼠标位置为中心缩放"。若未传入，
+      // 默认使用最近一次鼠标位置；若 lastMouseX/Y 仍为 0，则退化为以视口中心缩放
+      function zoomPlus(anchorX, anchorY) {
+        if (typeof anchorX !== "number") {
+          anchorX = (lastMouseX || visualViewport.width / 2);
+          anchorY = (lastMouseY || visualViewport.height / 2);
+        }
         if (zoomLevel >= 50) {
           zoomStep = 10;
         }
-        zoomLevel = Math.min(zoomMax, zoomLevel + zoomStep);
-        setZoomLevel(zoomLevel);
+        zoomTo(Math.min(zoomMax, zoomLevel + zoomStep), anchorX, anchorY);
       }
-      function zoomMinus() {
+      function zoomMinus(anchorX, anchorY) {
+        if (typeof anchorX !== "number") {
+          anchorX = (lastMouseX || visualViewport.width / 2);
+          anchorY = (lastMouseY || visualViewport.height / 2);
+        }
         if (zoomLevel <= 50) {
           zoomStep = 5;
         }
-        zoomLevel = Math.max(zoomMin, zoomLevel - zoomStep);
-        setZoomLevel(zoomLevel);
+        zoomTo(Math.max(zoomMin, zoomLevel - zoomStep), anchorX, anchorY);
       }
+      // 修改：默认适配行为改为"只适配宽度"——SVG 按宽度占满视口，高度可超出滚动
       function zoomFit() {
-        var widthPct = visualViewport.width / wrapper.clientWidth;
-        var heightPct = (visualViewport.height - 45) / wrapper.clientHeight;
-
-        var zoomPct = Math.min(widthPct, heightPct) * 100;
-        setZoomLevel(zoomPct);
+        var svg = wrapper.querySelector("svg");
+        if (!svg) return;
+        // 修改：fit 的对象是 SVG 的原始尺寸，而非 wrapper 容器（后者因 left/right:0 永远等于视口宽）。
+        // 优先读取 SVG 的 width attribute（d2 输出 SVG 一般都有）；缺失时退回 clientWidth，
+        // 注意 clientWidth 是 layout width，不受 transform 影响，避免反复 fit 时数值跳变
+        var svgWidth = parseFloat(svg.getAttribute("width")) || svg.clientWidth;
+        if (svgWidth <= 0) return;
+        // 重置 zoomStep，避免上次 Ctrl+wheel 留下的 step 影响后续计算
+        zoomStep = 5;
+        var scale = visualViewport.width / svgWidth;
+        panX = 0;
+        // 修改：panY=35 让 SVG 顶部对齐到 toolbar 下方（toolbar 高 45 减去 wrapper.top=10）
+        panY = 35;
+        var zoomPct = scale * 100;
+        // 修改：transform 与显示都用精确的 zoomPct，不做 roundToZoomLevel 舍入，
+        // 避免多次点击 fit 时数字在 55/60 之间跳动
+        zoomLevel = zoomPct;
+        applyTransform(zoomPct);
+        zoomSlider.value = zoomLevel;
 
         setZoomText(false);
 
-        zoomLevel = roundToZoomLevel(zoomPct);
+        fitMode = true;
+      }
+      // 修改：保留原"取宽高比例较小值"的语义（整体可见），并把 SVG 居中显示在
+      // toolbar 下方的可用区域内（之前 panX/panY 始终为 0，缩放后只对齐到左上角）
+      function zoomFitBoth() {
+        var svg = wrapper.querySelector("svg");
+        if (!svg) return;
+        var svgWidth = parseFloat(svg.getAttribute("width")) || svg.clientWidth;
+        var svgHeight = parseFloat(svg.getAttribute("height")) || svg.clientHeight;
+        if (svgWidth <= 0 || svgHeight <= 0) return;
+        zoomStep = 5;
+        var widthPct = visualViewport.width / svgWidth;
+        var heightPct = (visualViewport.height - 45) / svgHeight;
+
+        var scale = Math.min(widthPct, heightPct);
+        var scaledW = svgWidth * scale;
+        var scaledH = svgHeight * scale;
+        // 修改：水平方向以视口为中心
+        panX = (visualViewport.width - scaledW) / 2;
+        // 修改：垂直方向以 toolbar 下方可用空间为中心；
+        // +25 = toolbar(45) - wrapper.top(10) - 10（让 toolbar 与 wrapper 顶部间距上下平分到 panY 公式里）
+        panY = (visualViewport.height - scaledH + 25) / 2;
+        var zoomPct = scale * 100;
+        zoomLevel = zoomPct;
+        applyTransform(zoomPct);
+        zoomSlider.value = zoomLevel;
+
+        setZoomText(false);
 
         fitMode = true;
       }
+      // 修改：核心缩放函数。给定新的缩放比例与锚点（屏幕坐标），调整 pan 让锚点
+      // 下的内容坐标在缩放前后保持不变。公式：
+      //   panX_new = panX_old + (anchorX - wrapper.left) * (1 - newZl/oldZl)
+      // zoomTo 标记 fitMode=false，让 render 消息触发时保留用户当前位置而不是重新 fit
+      function zoomTo(newZl, anchorX, anchorY) {
+        if (newZl === zoomLevel) return;
+        var ratio = newZl / zoomLevel;
+        var rect = wrapper.getBoundingClientRect();
+        var dx = anchorX - rect.left;
+        var dy = anchorY - rect.top;
+        panX = panX + dx * (1 - ratio);
+        panY = panY + dy * (1 - ratio);
+        zoomLevel = newZl;
+        applyTransform(newZl);
+        setZoomText(true);
+        zoomSlider.value = newZl;
+        fitMode = false;
+      }
       function setZoomLevel(zl) {
-        wrapper.style.transform = `scale(${zl / 100},${zl / 100})`;
+        // 修改：调用 applyTransform 而非直接设置 scale，便于同时维持 pan 平移
+        applyTransform(zl);
         setZoomText(true);
 
         zoomSlider.value = zl;
         zoomLevel = zl;
 
         fitMode = false;
+      }
+      // 修改：把"先平移再缩放"统一封装到 transform 字符串。
+      // 顺序为 translate → scale：内容先沿 (panX, panY) 平移，再以 (0,0) 为原点缩放。
+      // 这样 pan 不会因为缩放比例变化而被二次放大
+      function applyTransform(zl) {
+        wrapper.style.transform =
+          "translate(" + panX + "px," + panY + "px) scale(" + zl / 100 + "," + zl / 100 + ")";
       }
       function sliderOnChange() {
         setZoomLevel(zoomSlider.value);
@@ -211,15 +336,33 @@
         (event) => {
           if (event.ctrlKey === true) {
             event.preventDefault();
+            // 修改：把鼠标坐标作为 anchor 传入 zoomPlus/zoomMinus，
+            // 实现"以鼠标位置为中心缩放"，缩放时鼠标下的内容不会被拉走
             if (event.deltaY > 0) {
-              zoomMinus();
+              zoomMinus(event.clientX, event.clientY);
             } else {
-              zoomPlus();
+              zoomPlus(event.clientX, event.clientY);
             }
           }
         },
         { passive: false }
       );
+
+      // 修改：window 级 mousemove，保证鼠标移出 wrapper 边界时也能继续拖动
+      window.addEventListener("mousemove", (event) => {
+        if (!isDragging) return;
+        panX = panStartX + (event.clientX - dragStartX);
+        panY = panStartY + (event.clientY - dragStartY);
+        applyTransform(zoomLevel);
+      });
+
+      // 修改：window 级 mouseup，保证在 wrapper 外松开也能正确结束拖动
+      window.addEventListener("mouseup", () => {
+        if (!isDragging) return;
+        isDragging = false;
+        // 移除 grabbing 光标，恢复 grab
+        wrapper.classList.remove("is-dragging");
+      });
 
       window.addEventListener("message", (event) => {
         const message = event.data; // The JSON data our extension sent
@@ -228,7 +371,12 @@
           case "render":
             wrapper.innerHTML = message.data;
 
-            if (fitMode === true) {
+            // 修改：扩展端传入的 preserveZoom=true 表示本次是 Recompile（而非初次预览），
+            // 此时仅重新插入 SVG 并按当前 zoomLevel 重画 transform，不重置 panX/panY；
+            // 其余分支保持原逻辑：fitMode=true 时 fit，否则按当前 zoomLevel 重画
+            if (message.preserveZoom) {
+              applyTransform(zoomLevel);
+            } else if (fitMode === true) {
               zoomFit();
             } else {
               setZoomLevel(zoomLevel);
@@ -301,7 +449,16 @@
         </svg>
       </button>
       <span id="percent"></span>
-      <button id="zoomFit" onclick="zoomFit()" title="Zoom to Fit">
+      <!-- 修改：新增"Fit Width"按钮——只适配宽度，水平左对齐，便于横向拖动浏览长图 -->
+      <button id="zoomFitWidth" onclick="zoomFit()" title="Fit Width">
+        <svg viewBox="0 -25 122 140">
+          <title>fit-width</title>
+          <!-- 横向左右双箭头 + 中间矩形示意"按宽度适配" -->
+          <path d="M 18 50 L 18 70 L 32 70 L 32 64 L 24 64 L 24 56 L 32 56 L 32 50 Z M 104 50 L 104 56 L 112 56 L 112 64 L 104 64 L 104 70 L 90 70 L 90 50 Z M 44 56 L 78 56 L 78 64 L 44 64 Z" />
+        </svg>
+      </button>
+      <!-- 修改：原 Zoom to Fit 按钮改名为"Fit Both"——按宽高较小值缩放并居中显示 -->
+      <button id="zoomFit" onclick="zoomFitBoth()" title="Fit Both">
         <svg id="zoom-to-fit" viewBox="0 -25 122 140">
           <title>zoom-to-fit</title>
           <path
