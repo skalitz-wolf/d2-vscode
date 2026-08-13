@@ -116,6 +116,10 @@ export class DocToPreviewGenerator {
       // Empty document, do nothing
       return;
     }
+    // 修改：在创建 webview 之前计算 preserveZoom。
+    // 若当前 trkObj.outputDoc 已存在，说明用户已经打开过预览，本次是 Recompile，
+    // 应保留用户的缩放比例和 pan 位置；否则是初次预览，走 fit 流程
+    const preserveZoom = !!trkObj.outputDoc;
     // If we don't have a preview window already, create one
     if (!trkObj.outputDoc && openPreview) {
       trkObj.outputDoc = new BrowserWindow(trkObj);
@@ -130,7 +134,8 @@ export class DocToPreviewGenerator {
       const p = path.parse(trkObj.inputDoc?.fileName || "");
 
       if (data.length > 0) {
-        trkObj.outputDoc?.setSvg(data);
+        // 修改：把 preserveZoom 透传给 setSvg，让 webview 决定是 fit 还是保留当前位置
+        trkObj.outputDoc?.setSvg(data, preserveZoom);
         outputChannel.appendInfo(`Preview for ${p.base} updated.`);
         trkObj.outputDoc?.hideToast();
       } else if (error.length > 0) {
