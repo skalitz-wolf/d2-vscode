@@ -23,16 +23,32 @@ class D2Tasks {
     const themeNumber: number = NameToThemeNumber(theme);
     const d2Path: string = ws.get("execPath", "d2");
 
+    // 修改：如果 .d2 文件里用 vars.d2-config 显式声明了 theme-id / layout-engine，
+    // 则不再传对应的命令行参数，让文件配置优先（命令行参数会覆盖文件内声明）。
+    // 日志第一行打印"实际生效值"，避免显示设置值造成误导。
+    const fileLayoutMatch = text.match(/layout-engine\s*:\s*([A-Za-z0-9_-]+)/);
+    const fileThemeMatch = text.match(/theme-id\s*:\s*(\d+)/);
+    const fileLayout = fileLayoutMatch ? fileLayoutMatch[1] : undefined;
+    const fileTheme = fileThemeMatch ? fileThemeMatch[1] : undefined;
+    const hasFileLayout = !!fileLayout;
+    const hasFileTheme = !!fileTheme;
+    const effectiveLayout = hasFileLayout ? fileLayout : layout;
+    const effectiveTheme = hasFileTheme ? `file(${fileTheme})` : theme;
+
     terminal?.(`${VT.Green}Starting Compile...${VT.Reset}`);
     terminal?.(
-      `Layout: ${VT.Yellow}${layout}${VT.Reset}  Theme: ${VT.Yellow}${theme}${VT.Reset}  Sketch: ${VT.Yellow}${sketch}${VT.Reset}`
+      `Layout: ${VT.Yellow}${effectiveLayout}${VT.Reset}` +
+        `${hasFileLayout ? ` (from file, overrides setting "${layout}")` : ""}` +
+        `  Theme: ${VT.Yellow}${effectiveTheme}${VT.Reset}` +
+        `${hasFileTheme ? ` (from file, overrides setting "${theme}")` : ""}` +
+        `  Sketch: ${VT.Yellow}${sketch}${VT.Reset}`
     );
     terminal?.(`Current Working Directory: ${VT.Yellow}${filePath}${VT.Reset}`);
     terminal?.("");
 
     const args: string[] = [
-      `--layout=${layout}`,
-      `--theme=${themeNumber}`,
+      ...(hasFileLayout ? [] : [`--layout=${layout}`]),
+      ...(hasFileTheme ? [] : [`--theme=${themeNumber}`]),
       `--sketch=${sketch}`,
       "-",
     ];
@@ -85,6 +101,65 @@ class D2Tasks {
     }
 
     return data;
+  }
+
+  /**
+   * 编译为二进制格式（PNG / PDF / PPTX / GIF）。
+   *
+   * 与 compile() 的区别：PNG 等格式是二进制数据，不能走 utf-8 文本通道。
+   * 这里用 encoding: null 让 spawnSync 返回 Buffer，并通过 --stdout-format 指定格式。
+   * 同样遵守"文件声明的 theme-id / layout-engine 优先"的规则。
+   *
+   * @param text d2 源码
+   * @param cwd 工作目录（决定相对 import 的解析路径）
+   * @param format 目标格式：png / pdf / pptx / gif
+   * @returns 编译成功的二进制 Buffer；失败返回 null
+   */
+  public compileBinary(text: string, cwd: string | undefined, format: string): Buffer | null {
+    const layout: string = ws.get("previewLayout", "dagre");
+    const theme: string = ws.get("previewTheme", "default");
+    const sketch: boolean = ws.get("previewSketch", false);
+    const themeNumber: number = NameToThemeNumber(theme);
+    const d2Path: string = ws.get("execPath", "d2");
+
+    const hasFileTheme = /theme-id\s*:/.test(text);
+    const hasFileLayout = /layout-engine\s*:/.test(text);
+
+    const args: string[] = [
+      ...(hasFileLayout ? [] : [`--layout=${layout}`]),
+      ...(hasFileTheme ? [] : [`--theme=${themeNumber}`]),
+      `--sketch=${sketch}`,
+      `--stdout-format=${format}`,
+      "-",
+    ];
+
+    // spawnSync doesn't like blank working directories
+    if (cwd === "") {
+      cwd = undefined;
+    }
+
+    const proc = spawnSync(d2Path, args, {
+      cwd: cwd,
+      input: text,
+      encoding: null,
+      maxBuffer: 1024 * 1024 * 64,
+    });
+
+    /** proc.status: 0 - success
+     *  proc.status: 1 - errors
+     *  proc.pid: 0 - EXE Not Found
+     */
+    if (proc.pid === 0) {
+      util.showErrorToolsNotFound(proc.error?.message ?? "");
+      return null;
+    }
+
+    if (proc.status !== 0) {
+      outputChannel.appendError(proc.stderr?.toString() ?? `Failed to convert to ${format}`);
+      return null;
+    }
+
+    return proc.stdout as Buffer;
   }
 
   format(textEditor: TextEditor): void {
