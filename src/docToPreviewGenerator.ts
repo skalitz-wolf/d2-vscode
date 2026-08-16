@@ -1,8 +1,9 @@
 import * as path from "path";
 import { TaskEndEvent, tasks, TextDocument } from "vscode";
 import { BrowserWindow } from "./browserWindow";
-import { d2TaskName, outputChannel, taskRunner } from "./extension";
+import { d2TaskName, outputChannel, taskRunner, ws } from "./extension";
 import { RefreshTimer } from "./refreshTimer";
+import { processSvg } from "./svgProcessor";
 import { statSync } from "fs";
 import { Mutex } from "async-mutex";
 
@@ -135,7 +136,10 @@ export class DocToPreviewGenerator {
 
       if (data.length > 0) {
         // 修改：把 preserveZoom 透传给 setSvg，让 webview 决定是 fit 还是保留当前位置
-        trkObj.outputDoc?.setSvg(data, preserveZoom);
+        // 同时走 processSvg 叠加水印（如果用户配置了 D2.watermark）
+        const wm = ws.get<string>("watermark", "");
+        const rmClasses = ws.get<string[]>("watermarkRemoveClasses", []);
+        trkObj.outputDoc?.setSvg(processSvg(data, wm, rmClasses), preserveZoom);
         outputChannel.appendInfo(`Preview for ${p.base} updated.`);
         trkObj.outputDoc?.hideToast();
       } else if (error.length > 0) {

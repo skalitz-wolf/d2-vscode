@@ -19,6 +19,7 @@ import {
 
 import { DocToPreviewGenerator } from "./docToPreviewGenerator";
 import { D2OutputChannel } from "./outputChannel";
+import { processSvg } from "./svgProcessor";
 import * as mdItContainer from "markdown-it-container";
 import { layoutPicker } from "./layoutPicker";
 import { themePicker } from "./themePicker";
@@ -151,13 +152,67 @@ export function activate(context: ExtensionContext): VSCAny {
             return;
           }
 
+          // 修改：导出走与预览相同的 processSvg，保证"看到什么就导出什么"。
+          // 用户配置 D2.watermark 后，导出的 .svg 也会带水印；留空则原样输出。
+          // D2.watermarkRemoveClasses 用于剥离 SVG 原本自带的外部水印。
+          const wm = ws.get<string>("watermark", "");
+          const rmClasses = ws.get<string[]>("watermarkRemoveClasses", []);
+          const processed = processSvg(svgText, wm, rmClasses);
+
           const svgFilename = filePath.substr(0, filePath.lastIndexOf(".")) + ".svg";
           const encoder = new TextEncoder();
-          const encodedText = encoder.encode(svgText);
+          const encodedText = encoder.encode(processed);
 
           workspace.fs.writeFile(Uri.file(svgFilename), encodedText).then(() => {
             outputChannel.appendInfo(`File ${filePath} converted to ${svgFilename}`);
           });
+        });
+      });
+    })
+  );
+
+  // 新增：导出为 PNG / PDF / PPTX / GIF 等常见图片格式。
+  // d2 CLI 原生支持这些格式（--stdout-format），PNG 等是二进制，
+  // 走 tasks.ts 的 compileBinary()（返回 Buffer），不经过文本通道。
+  context.subscriptions.push(
+    commands.registerCommand("D2.CompileToImage", async (fileInfo) => {
+      let filePath = fileInfo?.fsPath;
+
+      if (filePath === undefined) {
+        const activeEditor = window.activeTextEditor;
+        filePath = activeEditor?.document.uri.fsPath;
+        if (filePath === undefined) {
+          return;
+        }
+      }
+
+      const chosen = await window.showQuickPick(
+        [
+          { label: "PNG", value: "png" },
+          { label: "PDF", value: "pdf" },
+          { label: "PPTX", value: "pptx" },
+          { label: "GIF", value: "gif" },
+        ],
+        { placeHolder: "选择导出格式" }
+      );
+      if (!chosen) {
+        return;
+      }
+
+      workspace.openTextDocument(filePath).then((doc) => {
+        const data = d2Tasks.compileBinary(
+          doc.getText(),
+          path.dirname(filePath),
+          chosen.value
+        );
+        if (!data || data.length === 0) {
+          outputChannel.appendError(`Unable to convert ${filePath} to ${chosen.value}`);
+          return;
+        }
+
+        const outFile = filePath.substr(0, filePath.lastIndexOf(".")) + "." + chosen.value;
+        workspace.fs.writeFile(Uri.file(outFile), data).then(() => {
+          outputChannel.appendInfo(`File ${filePath} converted to ${outFile}`);
         });
       });
     })

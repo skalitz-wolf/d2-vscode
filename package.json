@@ -113,6 +113,11 @@
         "category": "d2"
       },
       {
+        "command": "D2.CompileToImage",
+        "title": "Compile D2 to Image",
+        "category": "d2"
+      },
+      {
         "command": "D2.PickTheme",
         "title": "Pick Preview Theme",
         "category": "d2"
@@ -210,6 +215,17 @@
           "type": "boolean",
           "default": true,
           "description": "Check for required D2 command line tools on startup."
+        },
+        "D2.watermark": {
+          "type": "string",
+          "default": "",
+          "description": "水印文字，留空不加；非空时预览和导出都会叠加在 SVG 右上角。"
+        },
+        "D2.watermarkRemoveClasses": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "要从 SVG 中剥离的额外 class 名（如外部水印），按 class 名匹配元素并删除。"
         }
       }
     },
@@ -222,6 +238,11 @@
         },
         {
           "command": "D2.CompileToSvg",
+          "when": "resourceLangId == d2",
+          "group": "d2"
+        },
+        {
+          "command": "D2.CompileToImage",
           "when": "resourceLangId == d2",
           "group": "d2"
         },
@@ -251,6 +272,11 @@
           "command": "D2.CompileToSvg",
           "when": "resourceLangId == d2",
           "group": "d2"
+        },
+        {
+          "command": "D2.CompileToImage",
+          "when": "resourceLangId == d2",
+          "group": "d2"
         }
       ],
       "editor/title": [
@@ -261,6 +287,11 @@
         },
         {
           "command": "D2.CompileToSvg",
+          "when": "resourceLangId == d2",
+          "group": "d2"
+        },
+        {
+          "command": "D2.CompileToImage",
           "when": "resourceLangId == d2",
           "group": "d2"
         }
@@ -275,6 +306,11 @@
           "command": "D2.CompileToSvg",
           "when": "resourceLangId == d2",
           "group": "d2"
+        },
+        {
+          "command": "D2.CompileToImage",
+          "when": "resourceLangId == d2",
+          "group": "d2"
         }
       ],
       "explorer/context": [
@@ -285,6 +321,11 @@
         },
         {
           "command": "D2.CompileToSvg",
+          "when": "resourceLangId == d2",
+          "group": "d2"
+        },
+        {
+          "command": "D2.CompileToImage",
           "when": "resourceLangId == d2",
           "group": "d2"
         }
