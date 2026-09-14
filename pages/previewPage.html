@@ -81,12 +81,26 @@
         right: 0px;
         /* 修改：拖动支持——光标显示为可抓取手型 */
         cursor: grab;
-        /* 修改：拖动时禁止文本选中，避免拖动过程中选中 SVG 内文字 */
+        /* 修改：默认允许选中 SVG 内文字（按住左键拖动划选、Ctrl+C 复制）。
+           原先为支持拖拽一刀切写了 user-select: none，导致文字永远无法选中；
+           现在把"禁止选中"收窄到下方 is-dragging（正在拖动平移）时才生效 */
+        user-select: text;
+      }
+
+      /* 修改：拖动过程中切换为"正在抓取"光标，提供视觉反馈；
+         同时禁止文字选中，避免平移时鼠标扫过文字产生误选 */
+      #previewWrapper.is-dragging {
+        cursor: grabbing;
         user-select: none;
       }
 
-      /* 修改：拖动过程中切换为"正在抓取"光标，提供视觉反馈 */
-      #previewWrapper.is-dragging {
+      /* 修改：悬停在 SVG 文字上显示 I 型光标，提示此处文字可选中复制 */
+      #previewWrapper text {
+        cursor: text;
+      }
+
+      /* 修改：拖动平移经过文字上方时保持 grabbing 光标，不闪回 I 型 */
+      #previewWrapper.is-dragging text {
         cursor: grabbing;
       }
 
@@ -179,11 +193,19 @@
           if (event.button !== 0) return;
           // 修改：若点中的是 <a> 链接则不启动拖动，避免误吞链接点击
           if (event.target.closest && event.target.closest("a[href]")) return;
+          // 修改：若点中的是 SVG 文字（<text>/<tspan>）则不启动拖动、
+          // 不 preventDefault，放行浏览器原生的文字选中行为：
+          // 按住左键拖动划选、双击选词，选中后 Ctrl+C 即可复制
+          if (event.target.closest && event.target.closest("text")) return;
           isDragging = true;
           dragStartX = event.clientX;
           dragStartY = event.clientY;
           panStartX = panX;
           panStartY = panY;
+          // 修改：开始拖动平移时清除已有的文字选区，避免旧高亮残留在画面上
+          if (window.getSelection) {
+            window.getSelection().removeAllRanges();
+          }
           // 修改：加上 is-dragging class 切换为 grabbing 光标
           wrapper.classList.add("is-dragging");
           event.preventDefault();
@@ -412,6 +434,9 @@
         "click",
         (event) => {
           const link = event.target.closest("a[href]");
+          // 修改：点在非链接处时 closest 返回 null，直接访问 link.href 会抛
+          // TypeError（原代码在每次普通点击时都会报错），这里先判空再发消息
+          if (!link) return;
           vscode.postMessage({
             command: "clickOnTag_A",
             link: link.href.baseVal || link.href,
