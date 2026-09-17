@@ -34,7 +34,7 @@ code --install-extension d2.vsix --force
 - 传参 `--target= --layout/--theme/--sketch/-`；`--target=`（空值）固定只渲染主 board，多板文件（layers/scenarios）也能预览/导出（单板无副作用）；文件里 `vars.d2-config` 声明了 `theme-id`/`layout-engine` 时不传对应参数（文件优先）。
 - 位图导出必须传中文字体：CJK 字体回退有 bug（Windows 落到 `malgun.ttf` 报错），`resolveExportFont` 默认自动传 `simhei.ttf`，用户可用 `D2.exportFontPath` 覆盖。d2 只认 `.ttf`（雅黑 `.ttc` 不行）；`Deng*.ttf` 有标签高度量成 0 的 bug，别用。
 - 含 `layers`/`scenarios` 的文件默认要输出多个 SVG 写不进 stdout，`--target=` 已解决（只渲染主板）；渲染指定层用 `d2 file.d2 --target=layers.x.* out`。
-- 预览内支持 board 跳转：单板渲染时 d2 给 `.link: layers.xxx` 节点生成 `root.*` 路由链接，`browserWindow.ts` 识别后用对应 `--target` 重新编译（board 路径大小写敏感，不能用 toLowerCase）；当前 board 记在 `D2P.currentTarget`，编辑自动刷新沿用不跳回主板；webview 右上角"返回主板"按钮由 render 消息的 `board` 字段控制显隐。
+- 预览内支持 board 跳转：单板渲染时 d2 给 `.link: layers.xxx` 节点生成 `root.*` 路由链接，`browserWindow.ts` 识别后用对应 `--target` 重新编译（board 路径大小写敏感，不能用 toLowerCase）；跳转只认 d2 自带的 `.appendix-icon` 角标（渲染在 `<a>` 外面、无 DOM 嵌套关系，webview 按几何重叠面积关联到 `<a>`）。返回是浏览器式历史栈：`D2P.boardHistory`，角标跳转压栈、返回按钮弹栈（`navigateBack` 消息），新开预览窗口时清空并重置回主板。坑：`#toolbar` 必须 `box-sizing: border-box`，否则 width:100% + padding 使工具栏溢出视口，绝对定位在其右缘的返回按钮被推出屏幕外。
 - TALA 已内置开源；sketch 手写体只覆盖英文，中文用黑体是预期行为。
 
 更多细节见 tech-doc 仓库 `工具/D2/修改 D2 VSCode 插件.md`（水印等章节已过时，以本文件为准）。

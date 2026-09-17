@@ -16,6 +16,10 @@
         padding-right: 200px;
         padding-bottom: 5px;
         width: 100%;
+        /* 修改：必须 border-box。默认 content-box 下 width:100% 只算内容宽，
+           加上 215px 的左右 padding 后工具栏实际比视口宽 215px 并向右溢出，
+           绝对定位在其右缘（right:10px）的"返回主板"按钮会被整个推出屏幕外 */
+        box-sizing: border-box;
         color: var(--vscode-sideBar-forground);
       }
 
@@ -159,6 +163,18 @@
         top: 3px;
         display: none;
       }
+
+      /* 修改：d2 的 .link 用 <a> 包住整个节点，但真正的"超链接图标"是渲染在
+         <a> 外面的独立 <g class="appendix-icon">（32x32，画在框右上角）。
+         整框可点会吞掉框内文字的选中复制，所以 <a> 本体不再响应点击、
+         不显示手型光标，跳转只认 d2 自带的 appendix-icon 角标 */
+      #previewWrapper a {
+        cursor: default;
+      }
+
+      .appendix-icon {
+        cursor: pointer;
+      }
     </style>
     <script>
       var zoomLevel = 100;
@@ -202,8 +218,8 @@
         wrapper.addEventListener("mousedown", (event) => {
           // 只响应左键
           if (event.button !== 0) return;
-          // 修改：若点中的是 <a> 链接则不启动拖动，避免误吞链接点击
-          if (event.target.closest && event.target.closest("a[href]")) return;
+          // 修改：按下 d2 自带的 appendix-icon 角标时不启动拖动，保证 click 跳转干净触发
+          if (event.target.closest && event.target.closest(".appendix-icon")) return;
           // 修改：若点中的是 SVG 文字（<text>/<tspan>）则不启动拖动、
           // 不 preventDefault，放行浏览器原生的文字选中行为：
           // 按住左键拖动划选、双击选词，选中后 Ctrl+C 即可复制
@@ -360,9 +376,31 @@
         vscode.postMessage({ command: "refreshPage" });
       }
 
-      // 修改：board 跳转——通知扩展端重新编译主板并渲染
+      // 修改：board 跳转的后退——通知扩展端弹出历史栈顶并跳转过去（浏览器式逐层后退）
       function navigateBack() {
-        vscode.postMessage({ command: "navigateBoard", board: "" });
+        vscode.postMessage({ command: "navigateBack" });
+      }
+
+      // 修改：d2 的超链接角标（appendix-icon）渲染在 <a> 外面，与锚点没有
+      // DOM 嵌套关系，只能按几何位置关联：取与角标矩形重叠面积最大的 <a>。
+      // getBoundingClientRect 含 wrapper 的缩放/平移，但角标与框受同一变换
+      // 影响，相对几何不变，比较结果不受缩放影响
+      function findAnchorForBadge(badge) {
+        var ir = badge.getBoundingClientRect();
+        var anchors = wrapper.querySelectorAll("a[href]");
+        var best = null;
+        var bestArea = 0;
+        for (var i = 0; i < anchors.length; i++) {
+          var r = anchors[i].getBoundingClientRect();
+          var w = Math.min(ir.right, r.right) - Math.max(ir.left, r.left);
+          var h = Math.min(ir.bottom, r.bottom) - Math.max(ir.top, r.top);
+          var area = w > 0 && h > 0 ? w * h : 0;
+          if (area > bestArea) {
+            bestArea = area;
+            best = anchors[i];
+          }
+        }
+        return best;
       }
 
       window.addEventListener("DOMContentLoaded", () => {
@@ -410,12 +448,17 @@
             wrapper.innerHTML = message.data;
 
             // 修改：board 非空说明渲染的是 layers/scenarios 的子 board，
-            // 显示"返回主板"按钮；主板则隐藏
+            // 显示"返回"按钮；主板则隐藏。backBoard 是历史栈顶（再退一步
+            // 去到的 board），null 表示无历史可退。
+            // 注意显示必须显式设 "inline-block"：CSS 里 #backBtn 有
+            // display:none 规则，style.display="" 只会退回该规则、按钮永不显示
             var backBtn = document.getElementById("backBtn");
             if (backBtn) {
               if (message.board) {
-                backBtn.title = "返回主板（当前: " + message.board + "）";
-                backBtn.style.display = "";
+                backBtn.title = message.backBoard
+                  ? "返回 " + message.backBoard + "（可逐层后退）"
+                  : "返回主板";
+                backBtn.style.display = "inline-block";
               } else {
                 backBtn.style.display = "none";
               }
@@ -467,9 +510,12 @@
       window.addEventListener(
         "click",
         (event) => {
-          const link = event.target.closest("a[href]");
-          // 修改：点在非链接处时 closest 返回 null，直接访问 link.href 会抛
-          // TypeError（原代码在每次普通点击时都会报错），这里先判空再发消息
+          // 修改：只点击 d2 自带的 appendix-icon 超链接角标才跳转（见
+          // findAnchorForBadge 的注释）。d2 的 <a> 包住整个节点，若对 <a>
+          // 直接放行会吞掉框内文字的选中复制（click 与拖选冲突）
+          const badge = event.target.closest(".appendix-icon");
+          if (!badge) return;
+          const link = findAnchorForBadge(badge);
           if (!link) return;
           vscode.postMessage({
             command: "clickOnTag_A",

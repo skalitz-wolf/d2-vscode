@@ -19,6 +19,10 @@ export class D2P {
   // 当前预览的 board 路径（"" = 主板）。
   // 编辑触发的自动刷新沿用此值，不会因改图跳回主板；图层跳转时更新
   currentTarget: string = "";
+  // board 跳转历史栈（浏览器式后退）：跳转前把当时的 board 压栈，
+  // "返回"按钮弹栈；新开预览窗口时清空。压栈只在 webview 的角标跳转
+  // 处做（browserWindow.ts），返回跳转本身不压栈，否则永远退不完
+  boardHistory: string[] = [];
 }
 
 /**
@@ -114,8 +118,16 @@ export class DocToPreviewGenerator {
       return;
     }
     // target === undefined 表示本次不改变 board（编辑触发的自动刷新），
-    // 沿用 currentTarget；图层跳转显式传入（含 "" 表示回主板）
+    // 沿用 currentTarget；图层跳转显式传入（含 "" 表示回主板）。
+    // 新开预览窗口时（无 outputDoc 且要开预览）重置回主板：currentTarget 是
+    // 文档级状态，关预览不清除，不重置的话重开预览会停留在上次跳转的图层；
+    // 预览内跳转时 outputDoc 已存在，不走这个分支，currentTarget 不受影响
     let boardChanged = false;
+    if (target === undefined && !trkObj.outputDoc && openPreview) {
+      boardChanged = trkObj.currentTarget !== "";
+      trkObj.currentTarget = "";
+      trkObj.boardHistory = [];
+    }
     if (target !== undefined && target !== trkObj.currentTarget) {
       trkObj.currentTarget = target;
       boardChanged = true;
