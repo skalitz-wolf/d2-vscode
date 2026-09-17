@@ -171,52 +171,51 @@ export function activate(context: ExtensionContext): VSCAny {
     })
   );
 
-  // 新增：导出为 PNG / PDF / PPTX / GIF 等常见图片格式。
-  // d2 CLI 原生支持这些格式（--stdout-format），PNG 等是二进制，
-  // 走 tasks.ts 的 compileBinary()（返回 Buffer），不经过文本通道。
-  context.subscriptions.push(
-    commands.registerCommand("D2.CompileToImage", async (fileInfo) => {
-      let filePath = fileInfo?.fsPath;
+  // 导出为 PNG / PDF / PPTX / GIF 等二进制格式（d2 CLI 原生支持 --stdout-format）。
+  // 每种格式注册为独立的顶层命令，直接出现在命令面板和右键菜单第一层，
+  // 不再经由 QuickPick 二级选择。四种格式共用同一套编译+落盘逻辑。
+  const compileToImage = (format: string, fileInfo: VSCAny) => {
+    let filePath = fileInfo?.fsPath;
 
+    if (filePath === undefined) {
+      const activeEditor = window.activeTextEditor;
+      filePath = activeEditor?.document.uri.fsPath;
       if (filePath === undefined) {
-        const activeEditor = window.activeTextEditor;
-        filePath = activeEditor?.document.uri.fsPath;
-        if (filePath === undefined) {
-          return;
-        }
+        return;
       }
+    }
 
-      const chosen = await window.showQuickPick(
-        [
-          { label: "PNG", value: "png" },
-          { label: "PDF", value: "pdf" },
-          { label: "PPTX", value: "pptx" },
-          { label: "GIF", value: "gif" },
-        ],
-        { placeHolder: "选择导出格式" }
+    workspace.openTextDocument(filePath).then((doc) => {
+      const data = d2Tasks.compileBinary(
+        doc.getText(),
+        path.dirname(filePath),
+        format
       );
-      if (!chosen) {
+      if (!data || data.length === 0) {
+        outputChannel.appendError(`Unable to convert ${filePath} to ${format}`);
         return;
       }
 
-      workspace.openTextDocument(filePath).then((doc) => {
-        const data = d2Tasks.compileBinary(
-          doc.getText(),
-          path.dirname(filePath),
-          chosen.value
-        );
-        if (!data || data.length === 0) {
-          outputChannel.appendError(`Unable to convert ${filePath} to ${chosen.value}`);
-          return;
-        }
-
-        const outFile = filePath.substr(0, filePath.lastIndexOf(".")) + "." + chosen.value;
-        workspace.fs.writeFile(Uri.file(outFile), data).then(() => {
-          outputChannel.appendInfo(`File ${filePath} converted to ${outFile}`);
-        });
+      const outFile = filePath.substr(0, filePath.lastIndexOf(".")) + "." + format;
+      workspace.fs.writeFile(Uri.file(outFile), data).then(() => {
+        outputChannel.appendInfo(`File ${filePath} converted to ${outFile}`);
       });
-    })
-  );
+    });
+  };
+
+  const imageFormats: [string, string][] = [
+    ["D2.CompileToPng", "png"],
+    ["D2.CompileToPdf", "pdf"],
+    ["D2.CompileToPptx", "pptx"],
+    ["D2.CompileToGif", "gif"],
+  ];
+  for (const [commandId, format] of imageFormats) {
+    context.subscriptions.push(
+      commands.registerCommand(commandId, (fileInfo) =>
+        compileToImage(format, fileInfo)
+      )
+    );
+  }
 
   languages.registerDocumentFormattingEditProvider(
     { language: d2Lang, scheme: "file" },

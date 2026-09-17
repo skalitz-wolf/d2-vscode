@@ -3,7 +3,7 @@
   "displayName": "D2",
   "publisher": "Terrastruct",
   "description": "Support for .d2 files.",
-  "version": "0.8.8",
+  "version": "0.8.81",
   "license": "BSD-3-Clause",
   "contributors": [
     "Barry Nolte <barry@barrynolte.com>"
@@ -113,8 +113,23 @@
         "category": "d2"
       },
       {
-        "command": "D2.CompileToImage",
-        "title": "Compile D2 to Image",
+        "command": "D2.CompileToPng",
+        "title": "Compile D2 to PNG",
+        "category": "d2"
+      },
+      {
+        "command": "D2.CompileToPdf",
+        "title": "Compile D2 to PDF",
+        "category": "d2"
+      },
+      {
+        "command": "D2.CompileToPptx",
+        "title": "Compile D2 to PPTX",
+        "category": "d2"
+      },
+      {
+        "command": "D2.CompileToGif",
+        "title": "Compile D2 to GIF",
         "category": "d2"
       },
       {
@@ -242,7 +257,22 @@
           "group": "d2"
         },
         {
-          "command": "D2.CompileToImage",
+          "command": "D2.CompileToPng",
+          "when": "resourceLangId == d2",
+          "group": "d2"
+        },
+        {
+          "command": "D2.CompileToPdf",
+          "when": "resourceLangId == d2",
+          "group": "d2"
+        },
+        {
+          "command": "D2.CompileToPptx",
+          "when": "resourceLangId == d2",
+          "group": "d2"
+        },
+        {
+          "command": "D2.CompileToGif",
           "when": "resourceLangId == d2",
           "group": "d2"
         },
@@ -274,7 +304,22 @@
           "group": "d2"
         },
         {
-          "command": "D2.CompileToImage",
+          "command": "D2.CompileToPng",
+          "when": "resourceLangId == d2",
+          "group": "d2"
+        },
+        {
+          "command": "D2.CompileToPdf",
+          "when": "resourceLangId == d2",
+          "group": "d2"
+        },
+        {
+          "command": "D2.CompileToPptx",
+          "when": "resourceLangId == d2",
+          "group": "d2"
+        },
+        {
+          "command": "D2.CompileToGif",
           "when": "resourceLangId == d2",
           "group": "d2"
         }
@@ -291,7 +336,22 @@
           "group": "d2"
         },
         {
-          "command": "D2.CompileToImage",
+          "command": "D2.CompileToPng",
+          "when": "resourceLangId == d2",
+          "group": "d2"
+        },
+        {
+          "command": "D2.CompileToPdf",
+          "when": "resourceLangId == d2",
+          "group": "d2"
+        },
+        {
+          "command": "D2.CompileToPptx",
+          "when": "resourceLangId == d2",
+          "group": "d2"
+        },
+        {
+          "command": "D2.CompileToGif",
           "when": "resourceLangId == d2",
           "group": "d2"
         }
@@ -308,7 +368,22 @@
           "group": "d2"
         },
         {
-          "command": "D2.CompileToImage",
+          "command": "D2.CompileToPng",
+          "when": "resourceLangId == d2",
+          "group": "d2"
+        },
+        {
+          "command": "D2.CompileToPdf",
+          "when": "resourceLangId == d2",
+          "group": "d2"
+        },
+        {
+          "command": "D2.CompileToPptx",
+          "when": "resourceLangId == d2",
+          "group": "d2"
+        },
+        {
+          "command": "D2.CompileToGif",
           "when": "resourceLangId == d2",
           "group": "d2"
         }
@@ -325,7 +400,22 @@
           "group": "d2"
         },
         {
-          "command": "D2.CompileToImage",
+          "command": "D2.CompileToPng",
+          "when": "resourceLangId == d2",
+          "group": "d2"
+        },
+        {
+          "command": "D2.CompileToPdf",
+          "when": "resourceLangId == d2",
+          "group": "d2"
+        },
+        {
+          "command": "D2.CompileToPptx",
+          "when": "resourceLangId == d2",
+          "group": "d2"
+        },
+        {
+          "command": "D2.CompileToGif",
           "when": "resourceLangId == d2",
           "group": "d2"
         }
