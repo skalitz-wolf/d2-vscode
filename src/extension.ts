@@ -19,7 +19,6 @@ import {
 
 import { DocToPreviewGenerator } from "./docToPreviewGenerator";
 import { D2OutputChannel } from "./outputChannel";
-import { processSvg } from "./svgProcessor";
 import * as mdItContainer from "markdown-it-container";
 import { layoutPicker } from "./layoutPicker";
 import { themePicker } from "./themePicker";
@@ -152,16 +151,9 @@ export function activate(context: ExtensionContext): VSCAny {
             return;
           }
 
-          // 修改：导出走与预览相同的 processSvg，保证"看到什么就导出什么"。
-          // 用户配置 D2.watermark 后，导出的 .svg 也会带水印；留空则原样输出。
-          // D2.watermarkRemoveClasses 用于剥离 SVG 原本自带的外部水印。
-          const wm = ws.get<string>("watermark", "");
-          const rmClasses = ws.get<string[]>("watermarkRemoveClasses", []);
-          const processed = processSvg(svgText, wm, rmClasses);
-
           const svgFilename = filePath.substr(0, filePath.lastIndexOf(".")) + ".svg";
           const encoder = new TextEncoder();
-          const encodedText = encoder.encode(processed);
+          const encodedText = encoder.encode(svgText);
 
           workspace.fs.writeFile(Uri.file(svgFilename), encodedText).then(() => {
             outputChannel.appendInfo(`File ${filePath} converted to ${svgFilename}`);
@@ -192,7 +184,10 @@ export function activate(context: ExtensionContext): VSCAny {
         format
       );
       if (!data || data.length === 0) {
-        outputChannel.appendError(`Unable to convert ${filePath} to ${format}`);
+        const msg = `Unable to convert ${filePath} to ${format}`;
+        outputChannel.appendError(msg);
+        // 导出失败必须可见，只写输出面板用户会以为命令没反应
+        window.showErrorMessage(`D2: ${msg}（详情见输出面板 "D2"）`);
         return;
       }
 
