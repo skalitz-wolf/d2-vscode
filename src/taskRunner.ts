@@ -25,8 +25,14 @@ export type TaskOutput = (text: string, flag?: boolean) => void;
  * when the task is finished.
  */
 export class TaskRunner {
-  public genTask(filename: string, text: string, callback: TaskRunnerCallback): void {
-    const pty = new CustomTaskTerminal(filename, text, callback);
+  public genTask(
+    filename: string,
+    text: string,
+    callback: TaskRunnerCallback,
+    // 要渲染的 board 路径，空串 = 主板（透传给 d2Tasks.compile）
+    target: string = ""
+  ): void {
+    const pty = new CustomTaskTerminal(filename, text, callback, target);
     const ce = new CustomExecution(
       (): Promise<CustomTaskTerminal> =>
         new Promise((resolve) => {
@@ -73,12 +79,19 @@ class CustomTaskTerminal implements Pseudoterminal {
   private docText: string;
   private callback: TaskRunnerCallback;
   private compileErrors = "";
+  private target: string;
 
-  constructor(filename: string, text: string, callback: TaskRunnerCallback) {
+  constructor(
+    filename: string,
+    text: string,
+    callback: TaskRunnerCallback,
+    target: string = ""
+  ) {
     this.fileName = path.parse(filename).base;
     this.fileDirectory = path.parse(filename).dir;
     this.docText = text;
     this.callback = callback;
+    this.target = target;
   }
 
   open(): void {
@@ -95,7 +108,8 @@ class CustomTaskTerminal implements Pseudoterminal {
         } else {
           this.writeLine(err);
         }
-      }
+      },
+      this.target
     );
 
     this.callback(data, this.compileErrors);

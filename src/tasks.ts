@@ -17,7 +17,10 @@ class D2Tasks {
     text: string,
     filePath?: string,
     log?: TaskOutput,
-    terminal?: TaskOutput
+    terminal?: TaskOutput,
+    // 要渲染的 board 路径（如 "layers.Sggate 内部"）；空串 = 主板。
+    // 由预览的图层跳转传入，默认主板
+    target: string = ""
   ): string {
     const layout: string = ws.get("previewLayout", "dagre");
     const theme: string = ws.get("previewTheme", "default");
@@ -49,9 +52,9 @@ class D2Tasks {
     terminal?.("");
 
     const args: string[] = [
-      // 始终只渲染主 board：多板文件（含 layers/scenarios）默认要输出 N+1 个 SVG，
-      // 无法写入单一 stdout 而直接报错；--target= 限定只渲染主板，单板文件无副作用
-      "--target=",
+      // 只渲染指定 board：多板文件（含 layers/scenarios）默认要输出 N+1 个 SVG，
+      // 无法写入单一 stdout 而直接报错；--target 限定渲染目标，单板文件无副作用
+      `--target=${target}`,
       ...(hasFileLayout ? [] : [`--layout=${layout}`]),
       ...(hasFileTheme ? [] : [`--theme=${themeNumber}`]),
       `--sketch=${sketch}`,
