@@ -49,6 +49,9 @@ class D2Tasks {
     terminal?.("");
 
     const args: string[] = [
+      // 始终只渲染主 board：多板文件（含 layers/scenarios）默认要输出 N+1 个 SVG，
+      // 无法写入单一 stdout 而直接报错；--target= 限定只渲染主板，单板文件无副作用
+      "--target=",
       ...(hasFileLayout ? [] : [`--layout=${layout}`]),
       ...(hasFileTheme ? [] : [`--theme=${themeNumber}`]),
       `--sketch=${sketch}`,
@@ -134,6 +137,8 @@ class D2Tasks {
     const exportFont = this.resolveExportFont(ws.get<string>("exportFontPath", ""));
 
     const args: string[] = [
+      // 同 compile()：--target= 只渲染主 board，避免多板文件无法写 stdout 报错
+      "--target=",
       ...(hasFileLayout ? [] : [`--layout=${layout}`]),
       ...(hasFileTheme ? [] : [`--theme=${themeNumber}`]),
       `--sketch=${sketch}`,
