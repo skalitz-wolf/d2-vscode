@@ -231,16 +231,10 @@
           "default": true,
           "description": "Check for required D2 command line tools on startup."
         },
-        "D2.watermark": {
+        "D2.exportFontPath": {
           "type": "string",
           "default": "",
-          "description": "水印文字，留空不加；非空时预览和导出都会叠加在 SVG 右上角。"
-        },
-        "D2.watermarkRemoveClasses": {
-          "type": "array",
-          "items": { "type": "string" },
-          "default": [],
-          "description": "要从 SVG 中剥离的额外 class 名（如外部水印），按 class 名匹配元素并删除。"
+          "description": "导出 PNG/PDF/PPTX/GIF 时传给 d2 的字体文件（.ttf，需含中文字形）。留空则 Windows 上自动使用 simhei.ttf，以绕过 d2 v0.9.0 内置渲染器的 CJK 字体回退 bug。"
         }
       }
     },

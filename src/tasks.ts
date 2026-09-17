@@ -1,4 +1,6 @@
 import { spawnSync } from "child_process";
+import { existsSync } from "fs";
+import * as os from "os";
 import * as path from "path";
 import { Range, TextEditor } from "vscode";
 import { outputChannel, ws } from "./extension";
@@ -125,10 +127,24 @@ class D2Tasks {
     const hasFileTheme = /theme-id\s*:/.test(text);
     const hasFileLayout = /layout-engine\s*:/.test(text);
 
+    // d2 v0.9.0 起位图由内置渲染器光栅化，默认字体 SourceSansPro 不含 CJK 字形，
+    // 会触发字体回退；而 Windows 上的回退解析有 bug（回退字体总量超 128MB 限制，
+    // 落到 malgun.ttf 直接报错）。显式指定一个覆盖中文的 .ttf 即可绕过。
+    // 注意：Deng.ttf/Dengb.ttf 实测有文本测量 bug（连接线标签高度被量成 0），勿作默认。
+    const exportFont = this.resolveExportFont(ws.get<string>("exportFontPath", ""));
+
     const args: string[] = [
       ...(hasFileLayout ? [] : [`--layout=${layout}`]),
       ...(hasFileTheme ? [] : [`--theme=${themeNumber}`]),
       `--sketch=${sketch}`,
+      ...(exportFont
+        ? [
+            `--font-regular=${exportFont}`,
+            `--font-bold=${exportFont}`,
+            `--font-italic=${exportFont}`,
+            `--font-semibold=${exportFont}`,
+          ]
+        : []),
       `--stdout-format=${format}`,
       "-",
     ];
@@ -160,6 +176,25 @@ class D2Tasks {
     }
 
     return proc.stdout as Buffer;
+  }
+
+  /**
+   * 解析导出位图（PNG/PDF/PPTX/GIF）时传给 d2 的字体文件路径。
+   *
+   * 优先级：用户配置 D2.exportFontPath（非空且存在）> Windows 自带 simhei.ttf > 不传（d2 默认行为）。
+   * d2 只接受 .ttf，Windows 的微软雅黑是 .ttc 用不了，所以默认选 simhei.ttf。
+   */
+  private resolveExportFont(configured: string): string | undefined {
+    const trimmed = (configured ?? "").trim();
+    if (trimmed) {
+      return existsSync(trimmed) ? trimmed : undefined;
+    }
+    const candidate = path.join(
+      process.env.SystemRoot ?? "C:\\Windows",
+      "Fonts",
+      "simhei.ttf"
+    );
+    return os.platform() === "win32" && existsSync(candidate) ? candidate : undefined;
   }
 
   format(textEditor: TextEditor): void {
