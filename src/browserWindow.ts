@@ -17,11 +17,14 @@ export class BrowserWindow {
   // 修改：缓存最近一次渲染的 SVG，用于 webview 上下文重置后
   // （例如面板被 Move to New Window、隐藏后再次显示）能重新推送恢复画面
   lastSvg: string;
+  // 最近渲染的 board 路径（空串 = 主板），与 lastSvg 配合用于上下文重置后恢复返回按钮状态
+  lastBoard: string;
 
   constructor(trkObj: D2P) {
     this.trackerObject = trkObj;
     // 修改：初始化为空串，避免 lastSvg 为 undefined
     this.lastSvg = "";
+    this.lastBoard = "";
 
     let fileName = "";
     let filePath = "";
@@ -66,7 +69,12 @@ export class BrowserWindow {
       // context may have been reset, so re-send the last rendered
       // SVG and clear stale toast/busy state.
       if (e.webviewPanel.visible && this.lastSvg.length > 0) {
-        this.webView.postMessage({ command: "render", data: this.lastSvg });
+        // 上下文重置后 webview 的缩放状态已丢失，不传 preserveZoom，走 fit 恢复
+        this.webView.postMessage({
+          command: "render",
+          data: this.lastSvg,
+          board: this.lastBoard,
+        });
         this.webView.postMessage({ command: "hideToast" });
         this.webView.postMessage({ command: "hideBusy" });
       }
@@ -81,7 +89,22 @@ export class BrowserWindow {
             previewGenerator.generateAll();
             break;
           case "clickOnTag_A": {
-            const f = message.link.trim().toLowerCase();
+            // 注意：这里必须用原始 link（不能 toLowerCase），board 路径是大小写
+            // 敏感的（如 "root.layers.Sggate 内部"），转小写会找不到目标层
+            const link = message.link.trim();
+
+            // board 跳转链接：单板渲染（--target=）时，d2 给 .link: layers.xxx
+            // 节点生成 root.* 形式的路由路径（本应交给 d2 --watch 的服务端解析）。
+            // 这里识别出来，用对应的 --target 重新编译预览即可实现预览内跳转
+            if (link === "root" || link.startsWith("root.")) {
+              const boardPath = link === "root" ? "" : link.slice("root.".length);
+              if (this.trackerObject?.inputDoc) {
+                previewGenerator.generate(this.trackerObject.inputDoc, true, boardPath);
+              }
+              return;
+            }
+
+            const f = link.toLowerCase();
             const isWeb: boolean = f.startsWith("http://") || f.startsWith("https://");
             const ir = isRelative(f);
 
@@ -93,7 +116,7 @@ export class BrowserWindow {
 
             // We have a file, or something that looks like a file, try to open it,
             // let vscode decide if it's possible.
-            const filepath = ir ? path.join(filePath, f) : f;
+            const filepath = ir ? path.join(filePath, link) : link;
 
             workspace.openTextDocument(filepath).then(
               (document) => {
@@ -108,6 +131,14 @@ export class BrowserWindow {
                 }
               }
             );
+            break;
+          }
+          case "navigateBoard": {
+            // webview 里"返回主板"按钮：board 为空串即主板
+            if (this.trackerObject?.inputDoc) {
+              previewGenerator.generate(this.trackerObject.inputDoc, true, message.board ?? "");
+            }
+            break;
           }
         }
       },
@@ -123,10 +154,17 @@ export class BrowserWindow {
   // 修改：setSvg 增加 preserveZoom 参数。
   // preserveZoom=true 表示本次是 Recompile（用户已经打开了预览，只是重新生成 SVG），
   // webview 端应保留用户的缩放比例和 pan 位置，仅替换 SVG 内容。
-  // preserveZoom=false 表示初次预览，正常走 fit 流程
-  setSvg(svg: string, preserveZoom: boolean = false): void {
+  // preserveZoom=false 表示初次预览，正常走 fit 流程。
+  // board 是当前渲染的 board 路径（空串 = 主板），webview 据此显示/隐藏"返回主板"按钮
+  setSvg(svg: string, preserveZoom: boolean = false, board: string = ""): void {
     this.lastSvg = svg;
-    this.webView.postMessage({ command: "render", data: svg, preserveZoom: preserveZoom });
+    this.lastBoard = board;
+    this.webView.postMessage({
+      command: "render",
+      data: svg,
+      preserveZoom: preserveZoom,
+      board: board,
+    });
   }
 
   resetZoom(): void {

@@ -150,6 +150,15 @@
         list-style: none;
         padding-left: 10px;
       }
+
+      /* 修改：board 跳转的"返回主板"按钮。固定在 toolbar 右端（toolbar 本身
+         padding-right: 200px 已预留了这块空间），只在预览非主板 board 时显示 */
+      #backBtn {
+        position: absolute;
+        right: 10px;
+        top: 3px;
+        display: none;
+      }
     </style>
     <script>
       var zoomLevel = 100;
@@ -162,6 +171,8 @@
       var busyIndicator;
       var toast, toastMsg, toastList;
       var fitMode = true;
+      // 修改：当前渲染的 board 路径（空串 = 主板）。board 变化时强制重新 fit
+      var currentBoard = "";
       // 修改：拖动平移相关状态——记录画布相对原点的偏移量
       var panX = 0;
       var panY = 0;
@@ -349,6 +360,11 @@
         vscode.postMessage({ command: "refreshPage" });
       }
 
+      // 修改：board 跳转——通知扩展端重新编译主板并渲染
+      function navigateBack() {
+        vscode.postMessage({ command: "navigateBoard", board: "" });
+      }
+
       window.addEventListener("DOMContentLoaded", () => {
         init();
       });
@@ -393,10 +409,28 @@
           case "render":
             wrapper.innerHTML = message.data;
 
+            // 修改：board 非空说明渲染的是 layers/scenarios 的子 board，
+            // 显示"返回主板"按钮；主板则隐藏
+            var backBtn = document.getElementById("backBtn");
+            if (backBtn) {
+              if (message.board) {
+                backBtn.title = "返回主板（当前: " + message.board + "）";
+                backBtn.style.display = "";
+              } else {
+                backBtn.style.display = "none";
+              }
+            }
+            // 修改：跳转到不同 board 时是一张全新的图，强制重新 fit，
+            // 不沿用旧图的缩放比例和 pan 位置
+            var boardSwitched = message.board !== currentBoard;
+            currentBoard = message.board || "";
+
             // 修改：扩展端传入的 preserveZoom=true 表示本次是 Recompile（而非初次预览），
             // 此时仅重新插入 SVG 并按当前 zoomLevel 重画 transform，不重置 panX/panY；
             // 其余分支保持原逻辑：fitMode=true 时 fit，否则按当前 zoomLevel 重画
-            if (message.preserveZoom) {
+            if (boardSwitched) {
+              zoomFit();
+            } else if (message.preserveZoom) {
               applyTransform(zoomLevel);
             } else if (fitMode === true) {
               zoomFit();
@@ -495,6 +529,16 @@
         <svg id="refreshbtn" viewBox="0 -15 122 140">
           <path
             d="M16.08,59.26A8,8,0,0,1,0,59.26a59,59,0,0,1,97.13-45V8a8,8,0,1,1,16.08,0V33.35a8,8,0,0,1-8,8L80.82,43.62a8,8,0,1,1-1.44-15.95l8-.73A43,43,0,0,0,16.08,59.26Zm22.77,19.6a8,8,0,0,1,1.44,16l-10.08.91A42.95,42.95,0,0,0,102,63.86a8,8,0,0,1,16.08,0A59,59,0,0,1,22.3,110v4.18a8,8,0,0,1-16.08,0V89.14h0a8,8,0,0,1,7.29-8l25.31-2.3Z"
+          />
+        </svg>
+      </button>
+      <!-- 修改：board 跳转的"返回主板"按钮，默认隐藏，进入子 board 后显示（见 #backBtn 样式） -->
+      <button id="backBtn" onclick="navigateBack()" title="返回主板">
+        <svg viewBox="0 -25 122 140">
+          <title>back-to-root</title>
+          <!-- 左向箭头：返回主板 -->
+          <path
+            d="M55.5,12.5 L23.5,44.5 a5,5 0 0 0 0,7 L55.5,83.5 a5,5 0 0 0 8.5,-3.5 L64,60 L98,60 a5,5 0 0 0 5,-5 L103,41 a5,5 0 0 0 -5,-5 L64,36 L64,16 a5,5 0 0 0 -8.5,-3.5 Z"
           />
         </svg>
       </button>

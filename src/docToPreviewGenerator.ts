@@ -16,6 +16,9 @@ export class D2P {
   outputDoc?: BrowserWindow;
   timer?: RefreshTimer;
   fileDateTime: number = 0;
+  // 当前预览的 board 路径（"" = 主板）。
+  // 编辑触发的自动刷新沿用此值，不会因改图跳回主板；图层跳转时更新
+  currentTarget: string = "";
 }
 
 /**
@@ -100,9 +103,9 @@ export class DocToPreviewGenerator {
     });
   }
 
-  generate(inDoc: TextDocument, openPreview: boolean = true): void {
+  generate(inDoc: TextDocument, openPreview: boolean = true, target?: string): void {
     const trkObj = this.getTrackObject(inDoc);
-    // if we can't find our tracking info, no sense doing anything
+    // 可以跟踪到我们文件
     if (!trkObj) {
       return;
     }
@@ -110,6 +113,14 @@ export class DocToPreviewGenerator {
     if (!trkObj.inputDoc) {
       return;
     }
+    // target === undefined 表示本次不改变 board（编辑触发的自动刷新），
+    // 沿用 currentTarget；图层跳转显式传入（含 "" 表示回主板）
+    let boardChanged = false;
+    if (target !== undefined && target !== trkObj.currentTarget) {
+      trkObj.currentTarget = target;
+      boardChanged = true;
+    }
+    const board = trkObj.currentTarget;
 
     const fileText = trkObj.inputDoc.getText();
     if (!fileText) {
@@ -118,8 +129,9 @@ export class DocToPreviewGenerator {
     }
     // 修改：在创建 webview 之前计算 preserveZoom。
     // 若当前 trkObj.outputDoc 已存在，说明用户已经打开过预览，本次是 Recompile，
-    // 应保留用户的缩放比例和 pan 位置；否则是初次预览，走 fit 流程
-    const preserveZoom = !!trkObj.outputDoc;
+    // 应保留用户的缩放比例和 pan 位置；否则是初次预览，走 fit 流程。
+    // 图层跳转（boardChanged）视为新图，重新 fit 而不是沿用旧图的缩放位置
+    const preserveZoom = !!trkObj.outputDoc && !boardChanged;
     // If we don't have a preview window already, create one
     if (!trkObj.outputDoc && openPreview) {
       trkObj.outputDoc = new BrowserWindow(trkObj);
@@ -130,12 +142,15 @@ export class DocToPreviewGenerator {
 
     trkObj.outputDoc?.showBusy();
 
+    // board 作为第 4 参传给 genTask → compile 的 --target，
+    // 决定本次渲染主板还是 layers/scenarios 的某个子 board
     taskRunner.genTask(trkObj.inputDoc?.fileName, fileText, (data, error) => {
       const p = path.parse(trkObj.inputDoc?.fileName || "");
 
       if (data.length > 0) {
-        // 修改：把 preserveZoom 透传给 setSvg，让 webview 决定是 fit 还是保留当前位置
-        trkObj.outputDoc?.setSvg(data, preserveZoom);
+        // 修改：把 preserveZoom 透传给 setSvg，让 webview 决定是 fit 还是保留当前位置；
+        // board 一并传给 webview，用于显示"返回主板"按钮
+        trkObj.outputDoc?.setSvg(data, preserveZoom, board);
         outputChannel.appendInfo(`Preview for ${p.base} updated.`);
         trkObj.outputDoc?.hideToast();
       } else if (error.length > 0) {
@@ -153,6 +168,6 @@ export class DocToPreviewGenerator {
       }
 
       trkObj.outputDoc?.hideBusy();
-    });
+    }, board);
   }
 }
