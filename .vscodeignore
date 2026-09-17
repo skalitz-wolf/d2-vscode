@@ -16,3 +16,5 @@ webpack.config.js
 tsconfig.json
 yarn.lock
 *.map
+AGENTS.md
+CLAUDE.md
