@@ -157,6 +157,35 @@
 
       /* 修改：board 跳转的"返回主板"按钮。固定在 toolbar 右端（toolbar 本身
          padding-right: 200px 已预留了这块空间），只在预览非主板 board 时显示 */
+      /* 修改：左上角场景切换栏。场景（scenarios）是整张图的变体、不属于任何
+         节点（与图层不同），因此不走节点 .link 角标，而是工具栏里这一行
+         可点击的场景名直接切换 board；"基础"固定为第一项（主板） */
+      #boardBar {
+        margin-left: 14px;
+        display: inline-block;
+        vertical-align: middle;
+      }
+
+      /* 未激活的场景项做成链接样式（textLink 色在深浅主题下都可读），
+         激活项用按钮底色填充标识当前 board */
+      #boardBar .boardChip {
+        min-width: 0;
+        margin-top: 1px;
+        margin-left: 2px;
+        padding: 2px 8px;
+        font-size: 12px;
+        color: var(--vscode-textLink-foreground);
+        background-color: transparent;
+        border: 0px;
+        cursor: pointer;
+      }
+
+      #boardBar .boardChip.active {
+        color: var(--vscode-button-foreground);
+        background-color: var(--vscode-button-background);
+        font-weight: 600;
+      }
+
       #backBtn {
         position: absolute;
         right: 10px;
@@ -381,6 +410,35 @@
         vscode.postMessage({ command: "navigateBack" });
       }
 
+      // 修改：渲染左上角场景切换栏。scenarios 是扩展端解析源码得到的顶层场景名
+      // 列表；"基础"固定第一项（主板，board 路径为空串），场景名的 board 路径
+      // 为 "scenarios.名字"。board 是当前渲染的 board 路径，用于高亮当前项；
+      // 当前在图层（layers.*）时没有任何场景项高亮，属预期
+      function renderBoardBar(scenarios, board) {
+        var bar = document.getElementById("boardBar");
+        if (!bar) return;
+        bar.innerHTML = "";
+        if (!scenarios || scenarios.length === 0) return;
+        var label = document.createElement("span");
+        label.innerText = "场景：";
+        bar.appendChild(label);
+        var addItem = function (name, path) {
+          var b = document.createElement("button");
+          b.className = "boardChip" + (board === path ? " active" : "");
+          b.innerText = name;
+          // 场景名可能含空格/引号等字符，用 addEventListener 而非内联
+          // onclick 拼字符串，避免转义问题
+          b.addEventListener("click", function () {
+            vscode.postMessage({ command: "selectBoard", board: path });
+          });
+          bar.appendChild(b);
+        };
+        addItem("基础", "");
+        for (var i = 0; i < scenarios.length; i++) {
+          addItem(scenarios[i], "scenarios." + scenarios[i]);
+        }
+      }
+
       // 修改：d2 的超链接角标（appendix-icon）渲染在 <a> 外面，与锚点没有
       // DOM 嵌套关系，只能按几何位置关联：取与角标矩形重叠面积最大的 <a>。
       // getBoundingClientRect 含 wrapper 的缩放/平移，但角标与框受同一变换
@@ -446,6 +504,9 @@
         switch (message.command) {
           case "render":
             wrapper.innerHTML = message.data;
+
+            // 修改：刷新左上角场景切换栏（场景列表可能随源码编辑变化）
+            renderBoardBar(message.scenarios, message.board || "");
 
             // 修改：board 非空说明渲染的是 layers/scenarios 的子 board，
             // 显示"返回"按钮；主板则隐藏。backBoard 是历史栈顶（再退一步
@@ -578,6 +639,8 @@
           />
         </svg>
       </button>
+      <!-- 修改：场景切换栏（默认空，有场景时由 JS 填充"场景：基础 xxx yyy"） -->
+      <span id="boardBar"></span>
       <!-- 修改：board 跳转的"返回主板"按钮，默认隐藏，进入子 board 后显示（见 #backBtn 样式） -->
       <button id="backBtn" onclick="navigateBack()" title="返回主板">
         <svg viewBox="0 -25 122 140">

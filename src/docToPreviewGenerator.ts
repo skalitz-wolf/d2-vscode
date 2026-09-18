@@ -1,5 +1,6 @@
 import * as path from "path";
 import { TaskEndEvent, tasks, TextDocument } from "vscode";
+import { parseTopLevelBoards } from "./boardParser";
 import { BrowserWindow } from "./browserWindow";
 import { d2TaskName, outputChannel, taskRunner } from "./extension";
 import { RefreshTimer } from "./refreshTimer";
@@ -23,6 +24,10 @@ export class D2P {
   // "返回"按钮弹栈；新开预览窗口时清空。压栈只在 webview 的角标跳转
   // 处做（browserWindow.ts），返回跳转本身不压栈，否则永远退不完
   boardHistory: string[] = [];
+  // 顶层场景名列表（boardParser 解析源码所得），随 render 消息发给
+  // webview 渲染左上角场景切换栏。场景是整图的变体、不属于任何节点，
+  // 不走节点 .link 角标（与图层不同）；无场景时为空数组，场景栏隐藏
+  scenarioList: string[] = [];
 }
 
 /**
@@ -139,6 +144,9 @@ export class DocToPreviewGenerator {
       // Empty document, do nothing
       return;
     }
+    // 每次编译前重新解析场景列表（源码可能刚增删场景）。
+    // 解析器容错：格式异常只影响个别键，失败最多少显示几个场景
+    trkObj.scenarioList = parseTopLevelBoards(fileText, "scenarios");
     // 修改：在创建 webview 之前计算 preserveZoom。
     // 若当前 trkObj.outputDoc 已存在，说明用户已经打开过预览，本次是 Recompile，
     // 应保留用户的缩放比例和 pan 位置；否则是初次预览，走 fit 流程。

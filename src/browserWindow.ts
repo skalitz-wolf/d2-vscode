@@ -21,6 +21,8 @@ export class BrowserWindow {
   lastBoard: string;
   // 最近一次的历史栈顶（null = 无历史），用于上下文重置后恢复按钮提示
   lastBackBoard: string | null;
+  // 最近一次的场景名列表，用于上下文重置后恢复左上角场景栏
+  lastScenarios: string[];
 
   constructor(trkObj: D2P) {
     this.trackerObject = trkObj;
@@ -28,6 +30,7 @@ export class BrowserWindow {
     this.lastSvg = "";
     this.lastBoard = "";
     this.lastBackBoard = null;
+    this.lastScenarios = [];
 
     let fileName = "";
     let filePath = "";
@@ -78,6 +81,7 @@ export class BrowserWindow {
           data: this.lastSvg,
           board: this.lastBoard,
           backBoard: this.lastBackBoard,
+          scenarios: this.lastScenarios,
         });
         this.webView.postMessage({ command: "hideToast" });
         this.webView.postMessage({ command: "hideBusy" });
@@ -149,6 +153,19 @@ export class BrowserWindow {
             }
             break;
           }
+          case "selectBoard": {
+            // 左上角场景栏点击切换 board。与角标跳转同一机制：显式跳转前
+            // 压历史栈（之后可用"返回"按钮逐层后退）；点击当前所在 board 忽略。
+            // message.board 是完整 board 路径："" = 主板（"基础"），
+            // "scenarios.X" = 场景 X
+            const trk = this.trackerObject;
+            const target = (message.board ?? "").trim();
+            if (trk?.inputDoc && target !== trk.currentTarget) {
+              trk.boardHistory.push(trk.currentTarget);
+              previewGenerator.generate(trk.inputDoc, true, target);
+            }
+            break;
+          }
         }
       },
       this,
@@ -170,12 +187,14 @@ export class BrowserWindow {
     this.lastSvg = svg;
     this.lastBoard = board;
     this.lastBackBoard = this.backBoard();
+    this.lastScenarios = this.trackerObject?.scenarioList ?? [];
     this.webView.postMessage({
       command: "render",
       data: svg,
       preserveZoom: preserveZoom,
       board: board,
       backBoard: this.lastBackBoard,
+      scenarios: this.lastScenarios,
     });
   }
 
