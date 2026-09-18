@@ -187,6 +187,63 @@ class D2Tasks {
   }
 
   /**
+   * 目录渲染：编译所有 board 到磁盘，board 间的 .link 生成相对路径，
+   * 浏览器直接打开即可点击跳转。
+   *
+   * 与 compile()/compileBinary() 的单板模式（--target=）不同，这里不传 --target，
+   * d2 会渲染全部 layers/scenarios：多板文件在 outFile 去掉 .svg 后缀的位置创建
+   * 同名目录（如 图层示例.d2 → 图层示例/，内含 index.svg + 每个 board 一个 SVG）；
+   * 单板文件退化为直接输出单个 SVG 文件。输入仍走 stdin（"-"），
+   * 与其它导出命令一致，未保存的编辑器内容也能导出。
+   *
+   * @returns 编译是否成功（失败详情已写入输出面板）
+   */
+  public compileToSvgs(text: string, cwd: string | undefined, outFile: string): boolean {
+    const layout: string = ws.get("previewLayout", "dagre");
+    const theme: string = ws.get("previewTheme", "default");
+    const sketch: boolean = ws.get("previewSketch", false);
+    const themeNumber: number = NameToThemeNumber(theme);
+    const d2Path: string = ws.get("execPath", "d2");
+
+    const hasFileTheme = /theme-id\s*:/.test(text);
+    const hasFileLayout = /layout-engine\s*:/.test(text);
+
+    const args: string[] = [
+      ...(hasFileLayout ? [] : [`--layout=${layout}`]),
+      ...(hasFileTheme ? [] : [`--theme=${themeNumber}`]),
+      `--sketch=${sketch}`,
+      "-",
+      outFile,
+    ];
+
+    // spawnSync doesn't like blank working directories
+    if (cwd === "") {
+      cwd = undefined;
+    }
+
+    const proc = spawnSync(d2Path, args, {
+      cwd: cwd,
+      input: text,
+      encoding: "utf-8",
+      maxBuffer: 1024 * 1024 * 24,
+    });
+
+    if (proc.pid === 0) {
+      util.showErrorToolsNotFound(proc.error?.message ?? "");
+      return false;
+    }
+
+    if (proc.status !== 0) {
+      outputChannel.appendError(
+        proc.stderr?.toString() ?? `Failed to compile to ${outFile}`
+      );
+      return false;
+    }
+
+    return true;
+  }
+
+  /**
    * 解析导出位图（PNG/PDF/PPTX/GIF）时传给 d2 的字体文件路径。
    *
    * 优先级：用户配置 D2.exportFontPath（非空且存在）> Windows 自带 simhei.ttf > 不传（d2 默认行为）。
