@@ -29,6 +29,7 @@ code --install-extension d2.vsix --force
 | `src/extension.ts` | 注册命令、监听文档事件 |
 | `src/tasks.ts` | 调 d2 CLI：`compile()`（stdin→SVG）、`compileBinary()`（stdin→位图）、`format()` |
 | `src/docToPreviewGenerator.ts` / `src/browserWindow.ts` | 预览面板中间层 / WebviewPanel 包装 |
+| `src/boardParser.ts` | 解析 d2 源码顶层 layers/scenarios 一级键名（深度扫描，容错），供场景栏使用 |
 | `pages/previewPage.html` | 预览页交互（拖拽、缩放、Fit），JS 用 `var` 是历史风格 |
 
 ## d2 CLI 要点（v0.9.0 实测）
@@ -37,6 +38,11 @@ code --install-extension d2.vsix --force
 - 位图导出必须传中文字体：CJK 字体回退有 bug（Windows 落到 `malgun.ttf` 报错），`resolveExportFont` 默认自动传 `simhei.ttf`，用户可用 `D2.exportFontPath` 覆盖。d2 只认 `.ttf`（雅黑 `.ttc` 不行）；`Deng*.ttf` 有标签高度量成 0 的 bug，别用。
 - 含 `layers`/`scenarios` 的文件默认要输出多个 SVG 写不进 stdout，`--target=` 已解决（只渲染主板）；渲染指定层用 `d2 file.d2 --target=layers.x.* out`。
 - 预览内支持 board 跳转：单板渲染时 d2 给 `.link: layers.xxx` 节点生成 `root.*` 路由链接，`browserWindow.ts` 识别后用对应 `--target` 重新编译（board 路径大小写敏感，不能用 toLowerCase）；跳转只认 d2 自带的 `.appendix-icon` 角标（渲染在 `<a>` 外面、无 DOM 嵌套关系，webview 按几何重叠面积关联到 `<a>`）。返回是浏览器式历史栈：`D2P.boardHistory`，角标跳转压栈、返回按钮弹栈（`navigateBack` 消息），新开预览窗口时清空并重置回主板。坑：`#toolbar` 必须 `box-sizing: border-box`，否则 width:100% + padding 使工具栏溢出视口，绝对定位在其右缘的返回按钮被推出屏幕外。
+- 场景（scenarios）是整图的变体、不属于任何节点，**不用节点 `.link`**（那是图层的语义）；预览左上角有场景切换栏（"场景：基础 xxx yyy"）：`boardParser.ts` 解析顶层 scenarios 一级键（d2 CLI 没有"列出 boards"的命令），随 render 消息发给 webview，点击发 `selectBoard`（board 路径 `""`=基础 / `scenarios.名字`），跳转与角标同机制（压历史栈）。已知限制：d2 渲染非 root 板时，板内指向兄弟场景/回主板的链接 href 不带 `root.` 前缀（裸名、`..\index`），插件不识别，预览内从场景板内部发起的这类跳转不可用（浏览器打开目录渲染 SVG 不受影响）。
 - TALA 已内置开源；sketch 手写体只覆盖英文，中文用黑体是预期行为。
+
+## 深度研究文档
+
+board 导航相关（layers/scenarios 语义、`.link` 与 href 格式规则、`@` 导入语法、场景栏预览实现、SVG 内场景栏可行性、复测方法）见 **`docs/board-navigation.md`**——动手改跳转/场景栏/导入相关功能前先读它，里面有全部已验证结论，避免重做 CLI 实验。
 
 更多细节见 tech-doc 仓库 `工具/D2/修改 D2 VSCode 插件.md`（水印等章节已过时，以本文件为准）。
