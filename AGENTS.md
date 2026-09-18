@@ -1,6 +1,8 @@
 # AGENTS.md — D2 VS Code 插件（个人 fork）开发指南
 
-[d2lang/d2-vscode](https://github.com/d2lang/d2-vscode) 的个人 fork，开发分支 **`fix-优化-260813`**。插件不内嵌 d2，运行时通过 `D2.execPath`（默认 PATH 上的 `d2`）调用 CLI。
+[d2lang/d2-vscode](https://github.com/d2lang/d2-vscode) 的个人 fork，开发分支 **`feat-0.9.0-260917`**。插件不内嵌 d2，运行时通过 `D2.execPath`（默认 PATH 上的 `d2`）调用 CLI。
+
+**插件 ID 是 `wentong.d2`（publisher 已从 Terrastruct 改为 wentong）**，与官方 `terrastruct.d2` 区分开：ID 相同会被 VS Code 视为官方插件的本地副本，检查更新/修复时被市场版本覆盖（2026-09-18 实际发生过）。命令名（`D2.*`）与设置项来自 `contributes` 声明，与 ID 无关，换 ID 后使用无差异。不要改回 Terrastruct。
 
 ## 规则
 

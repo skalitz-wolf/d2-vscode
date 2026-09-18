@@ -1,7 +1,7 @@
 {
   "name": "d2",
-  "displayName": "D2",
-  "publisher": "Terrastruct",
+  "displayName": "D2 (个人 fork)",
+  "publisher": "wentong",
   "description": "Support for .d2 files.",
   "version": "0.8.81",
   "license": "BSD-3-Clause",
