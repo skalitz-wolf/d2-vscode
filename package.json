@@ -1,9 +1,9 @@
 {
-  "name": "d2",
+  "name": "1",
   "displayName": "D2 (个人 fork)",
-  "publisher": "wentong",
+  "publisher": "d2",
   "description": "Support for .d2 files.",
-  "version": "0.8.81",
+  "version": "0.8.8",
   "license": "BSD-3-Clause",
   "contributors": [
     "Barry Nolte <barry@barrynolte.com>"
