@@ -163,6 +163,39 @@ export function activate(context: ExtensionContext): VSCAny {
     })
   );
 
+  context.subscriptions.push(
+    commands.registerCommand("D2.CompileToSvgs", (fileInfo) => {
+      let filePath = fileInfo?.fsPath;
+
+      if (filePath === undefined) {
+        const activeEditor = window.activeTextEditor;
+        filePath = activeEditor?.document.uri.fsPath;
+        if (filePath === undefined) {
+          return;
+        }
+      }
+
+      workspace.openTextDocument(filePath).then((doc) => {
+        // 输出路径以 .svg 结尾：多板文件 d2 会建同名目录（图层示例.d2 → 图层示例/），
+        // 单板文件则直接生成单个 SVG 文件
+        const outFile = filePath.substr(0, filePath.lastIndexOf(".")) + ".svg";
+        const ok = d2Tasks.compileToSvgs(
+          doc.getText(),
+          path.dirname(filePath),
+          outFile
+        );
+        if (!ok) {
+          const msg = `Unable to convert ${filePath} to ${outFile}`;
+          outputChannel.appendError(msg);
+          // 导出失败必须可见，只写输出面板用户会以为命令没反应
+          window.showErrorMessage(`D2: ${msg}（详情见输出面板 "D2"）`);
+          return;
+        }
+        outputChannel.appendInfo(`File ${filePath} converted to ${outFile}`);
+      });
+    })
+  );
+
   // 导出为 PNG / PDF / PPTX / GIF 等二进制格式（d2 CLI 原生支持 --stdout-format）。
   // 每种格式注册为独立的顶层命令，直接出现在命令面板和右键菜单第一层，
   // 不再经由 QuickPick 二级选择。四种格式共用同一套编译+落盘逻辑。

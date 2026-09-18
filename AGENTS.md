@@ -8,7 +8,7 @@
 
 - **不要主动升级 `package.json` 的 `version`**，用户明确要求才改；重装用 `--force` 覆盖。版本号只能 3 段（vsce 拒绝 4 段，如 `0.8.8.1`）。
 - 注释写高价值中文注释（设计意图、边界条件），不写逐行解释。
-- 水印功能已整体删除（2026-09-17），不要恢复；导出命令是四个顶层命令 `D2.CompileToPng/Pdf/Pptx/Gif`。
+- 水印功能已整体删除（2026-09-17），不要恢复。导出命令均为顶层：`D2.CompileToPng/Pdf/Pptx/Gif`（位图，`compileBinary()` 单板）与 `D2.CompileToSvg`（单板 SVG）之外的 `D2.CompileToSvgs`（目录渲染，2026-09-18 新增）：不传 `--target`，多板文件在 d2 同目录建同名文件夹（`x.d2` → `x/`，含 index.svg + 每 board 一个 SVG，`.link` 为相对路径，浏览器打开可跳转）；单板文件退化为单个 SVG；输入走 stdin，未保存内容也能导出。
 
 ## 修改 → 打包 → 安装
 

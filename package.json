@@ -113,6 +113,11 @@
         "category": "d2"
       },
       {
+        "command": "D2.CompileToSvgs",
+        "title": "Compile D2 to SVGs",
+        "category": "d2"
+      },
+      {
         "command": "D2.CompileToPng",
         "title": "Compile D2 to PNG",
         "category": "d2"
@@ -251,6 +256,11 @@
           "group": "d2"
         },
         {
+          "command": "D2.CompileToSvgs",
+          "when": "resourceLangId == d2",
+          "group": "d2"
+        },
+        {
           "command": "D2.CompileToPng",
           "when": "resourceLangId == d2",
           "group": "d2"
@@ -298,6 +308,11 @@
           "group": "d2"
         },
         {
+          "command": "D2.CompileToSvgs",
+          "when": "resourceLangId == d2",
+          "group": "d2"
+        },
+        {
           "command": "D2.CompileToPng",
           "when": "resourceLangId == d2",
           "group": "d2"
@@ -326,6 +341,11 @@
         },
         {
           "command": "D2.CompileToSvg",
+          "when": "resourceLangId == d2",
+          "group": "d2"
+        },
+        {
+          "command": "D2.CompileToSvgs",
           "when": "resourceLangId == d2",
           "group": "d2"
         },
@@ -362,6 +382,11 @@
           "group": "d2"
         },
         {
+          "command": "D2.CompileToSvgs",
+          "when": "resourceLangId == d2",
+          "group": "d2"
+        },
+        {
           "command": "D2.CompileToPng",
           "when": "resourceLangId == d2",
           "group": "d2"
@@ -390,6 +415,11 @@
         },
         {
           "command": "D2.CompileToSvg",
+          "when": "resourceLangId == d2",
+          "group": "d2"
+        },
+        {
+          "command": "D2.CompileToSvgs",
           "when": "resourceLangId == d2",
           "group": "d2"
         },
