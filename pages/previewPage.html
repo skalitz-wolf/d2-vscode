@@ -108,6 +108,15 @@
         cursor: grabbing;
       }
 
+      /* 修改：单击文字复制成功后的短暂高亮。d2 把 fill 写在 <text> 的属性上，
+         表现属性优先级低于任何 CSS 规则，所以这里能覆盖；多行标签的 <tspan>
+         没有自己的 fill，会一并跟着变色。
+         色值取 textLink 而不是选区底色：选区底色当字形颜色用时，浅色主题下
+         在白色图底上几乎看不见 */
+      #previewWrapper text.copy-flash {
+        fill: var(--vscode-textLink-foreground);
+      }
+
       #progressBar {
         position: fixed;
         margin-left: -10px;
@@ -232,6 +241,9 @@
       // 修改：缩放锚点（鼠标在屏幕上的位置），用于实现"以鼠标位置为中心缩放"
       var lastMouseX = 0;
       var lastMouseY = 0;
+      // 修改：单击复制后的高亮反馈状态——当前被高亮的文字元素与其清除定时器
+      var flashTimer = null;
+      var flashedEl = null;
       const vscode = acquireVsCodeApi();
 
       function init() {
@@ -373,12 +385,18 @@
         fitMode = false;
       }
       function setZoomLevel(zl) {
+        // 修改：修正百分比文字滞后一步的缺陷——setZoomText() 读的是 zoomLevel，
+        // 而原顺序是先刷新文字、后赋值 zoomLevel，于是显示值永远是上一次的
+        // （setZoomLevel(250) 后显示 100%）。改成与 zoomTo/zoomFit 一致的
+        // 「先赋值、再刷新」
+        // 修改：Number() 转换不可省——缩放滑块（zoomSlider.value）与扩展端
+        // 传进来的都是字符串，原样存进 zoomLevel 后，下一次 setZoomText() 会因
+        // 字符串没有 .toFixed 而抛 TypeError，直接打断整个预览脚本
+        zoomLevel = Number(zl);
         // 修改：调用 applyTransform 而非直接设置 scale，便于同时维持 pan 平移
-        applyTransform(zl);
+        applyTransform(zoomLevel);
+        zoomSlider.value = zoomLevel;
         setZoomText(true);
-
-        zoomSlider.value = zl;
-        zoomLevel = zl;
 
         fitMode = false;
       }
@@ -459,6 +477,100 @@
           }
         }
         return best;
+      }
+
+      // 修改：取一个 SVG 文字元素的"整行"内容。d2 把多行标签的每一行渲染成
+      // 独立的 <tspan>，此时 textContent 会把各行无分隔符地粘起来
+      // （alpha / beta / gamma → "alphabetagamma"），必须按行用换行符连接；
+      // 没有行元素的单行标签、以及 markdown 富文本被拆出的一片文字，直接取全文
+      function textOfTextElement(el) {
+        var rows = el.querySelectorAll("tspan");
+        if (rows.length > 0) {
+          var lines = [];
+          for (var i = 0; i < rows.length; i++) {
+            lines.push(rows[i].textContent);
+          }
+          return lines.join("\n");
+        }
+        return el.textContent || "";
+      }
+
+      // 修改：剪贴板写入。主路径用 navigator.clipboard——VS Code 的 webview
+      // 宿主已为内层 iframe 声明 clipboard-write 权限，不需要扩展端参与；
+      // 失败（API 不可用或被拒）退化为 execCommand 兜底（VS Code 自身的
+      // 右键复制也走这条）。两条路径都不向外抛异常：预览页脚本一旦崩溃，
+      // 缩放、平移、跳转会一起失效
+      function writeClipboard(text, done) {
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(
+              function () {
+                done(true);
+              },
+              function () {
+                done(copyViaExecCommand(text));
+              }
+            );
+            return;
+          }
+        } catch (e) {
+          // 落到下方兜底路径
+        }
+        done(copyViaExecCommand(text));
+      }
+
+      // 修改：兜底复制。execCommand 只复制当前选区，所以借一个离屏 textarea
+      // 承载文本；用完立即移除并清掉选区，避免残留选区影响下一次单击的判定
+      function copyViaExecCommand(text) {
+        try {
+          var ta = document.createElement("textarea");
+          ta.value = text;
+          ta.setAttribute("readonly", "");
+          ta.style.position = "fixed";
+          ta.style.top = "-1000px";
+          ta.style.opacity = "0";
+          document.body.appendChild(ta);
+          ta.select();
+          var ok = document.execCommand("copy");
+          document.body.removeChild(ta);
+          if (window.getSelection) {
+            window.getSelection().removeAllRanges();
+          }
+          return ok;
+        } catch (e) {
+          return false;
+        }
+      }
+
+      // 修改：复制成功后的就地反馈。只给被复制的文字换色，不复用 #toast——
+      // 后者同时承载"Loading..."与编译错误列表，复用会把错误信息顶掉
+      function flashCopied(el) {
+        if (flashedEl) {
+          flashedEl.classList.remove("copy-flash");
+        }
+        if (flashTimer) {
+          clearTimeout(flashTimer);
+        }
+        flashedEl = el;
+        el.classList.add("copy-flash");
+        flashTimer = setTimeout(function () {
+          if (flashedEl) {
+            flashedEl.classList.remove("copy-flash");
+          }
+          flashedEl = null;
+          flashTimer = null;
+        }, 600);
+      }
+
+      // 修改：单击文字复制整行。内容为空（如纯图形节点）时既不复制也不闪
+      function copyTextElement(el) {
+        var text = textOfTextElement(el).trim();
+        if (!text) return;
+        writeClipboard(text, function (ok) {
+          if (ok) {
+            flashCopied(el);
+          }
+        });
       }
 
       window.addEventListener("DOMContentLoaded", () => {
@@ -575,13 +687,24 @@
           // findAnchorForBadge 的注释）。d2 的 <a> 包住整个节点，若对 <a>
           // 直接放行会吞掉框内文字的选中复制（click 与拖选冲突）
           const badge = event.target.closest(".appendix-icon");
-          if (!badge) return;
-          const link = findAnchorForBadge(badge);
-          if (!link) return;
-          vscode.postMessage({
-            command: "clickOnTag_A",
-            link: link.href.baseVal || link.href,
-          });
+          if (badge) {
+            const link = findAnchorForBadge(badge);
+            if (!link) return;
+            vscode.postMessage({
+              command: "clickOnTag_A",
+              link: link.href.baseVal || link.href,
+            });
+            return;
+          }
+          // 修改：单击 SVG 文字即复制该文字元素的整行内容（角标优先，见上）。
+          // 选择器限定在 #previewWrapper 内，避免工具栏里将来出现 <text> 时误触发。
+          // 已有非折叠选区说明用户刚划选过，此时不复制、不覆盖选区
+          const textEl = event.target.closest && event.target.closest("#previewWrapper text");
+          if (!textEl) return;
+          const sel = window.getSelection ? window.getSelection() : null;
+          // 只在确知存在选区时跳过：isCollapsed 缺失（个别环境）不当作有选区
+          if (sel && sel.isCollapsed === false) return;
+          copyTextElement(textEl);
         },
         false
       );
