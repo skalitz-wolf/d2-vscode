@@ -18,3 +18,11 @@ yarn.lock
 *.map
 AGENTS.md
 CLAUDE.md
+# 修改：agent 工具脚手架与规格记录，与插件运行无关，不进包。
+# 不加这几行时它们会被原样打进去（.claude/.pi/.agents 合计约 496 KB，
+# 比 dist/ 的插件代码还大，包体从 109 KB 涨到 292 KB）；
+# 早先包里出现过的 .claude/ptest/ 测试残留也是同一原因
+.claude/**
+.pi/**
+.agents/**
+openspec/**
