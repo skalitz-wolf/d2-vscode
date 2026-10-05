@@ -16,9 +16,13 @@
 cd "D:/Users/wentong/IdeaProjects/d2-vscode"
 yarn install --frozen-lockfile   # node_modules/ 存在则跳过
 yarn run package                 # webpack production → dist/extension.js
-yarn run pkg                     # vsce → d2.vsix（文件名固定，不带版本号）
-code --install-extension d2.vsix --force
+yarn run pkg                     # vsce → d2.1-YYMMDD.vsix（带打包当天日期，见下）
+code --install-extension d2.1-<当天YYMMDD>.vsix --force
 ```
+
+产物名带打包当天的本地日期：`d2.1-` + 两位年两位月两位日（2026-10-05 打包 → `d2.1-261005.vsix`），旧日期的产物不会被覆盖。装的时候把 `<当天YYMMDD>` 换成实际日期，或用一条命令搞定打包+安装的 `yarn run dev`（它自己算好文件名并复用，不存在跨零点错配）。
+
+`pkg`/`dev` 用 **niu**（Niubash，bash 兼容 shell，需在 PATH 上）计算日期——`cmd` 没有 `$(...)`，且其 `%DATE%` 受系统语言影响不可解析。只在 `pkg`/`dev` 内显式调用 niu，**不要**用 yarn 的 `script-shell` 全局配置：那会连带让 `yarn package`（webpack 编译）也走 niu，而 CI 跑在 Linux 没有 niu，编译步骤会直接失败。
 
 装完在 VS Code 里 Reload Window 生效。`pages/previewPage.html` 不走 webpack，改它只需重开预览，不用打包。
 
@@ -35,14 +39,16 @@ code --install-extension d2.vsix --force
 ## d2 CLI 要点（v0.9.0 实测）
 
 - 传参 `--target= --layout/--theme/--sketch/-`；`--target=`（空值）固定只渲染主 board，多板文件（layers/scenarios）也能预览/导出（单板无副作用）；文件里 `vars.d2-config` 声明了 `theme-id`/`layout-engine` 时不传对应参数（文件优先）。
-- 位图导出必须传中文字体：CJK 字体回退有 bug（Windows 落到 `malgun.ttf` 报错），`resolveExportFont` 默认自动传 `simhei.ttf`，用户可用 `D2.exportFontPath` 覆盖。d2 只认 `.ttf`（雅黑 `.ttc` 不行）；`Deng*.ttf` 有标签高度量成 0 的 bug，别用。
+- 位图导出必须传中文字体：CJK 字体回退有 bug（Windows 落到 `malgun.ttf` 报错），`resolveExportFont` 默认自动传 `simhei.ttf`，用户可用 `D2.exportFontPath` 覆盖。d2 只认 `.ttf`（雅黑 `.ttc` 不行）；`Deng*.ttf` 有标签高度量成 0 的 bug，别用。**例外：sketch 下不传**——传任意 `--font-*` 会把 d2 自带的英文手写体（Fuzzy Bubbles）顶掉换成黑体，反而更糟（2026-10-02 修复，详见 `docs/sketch-cjk-fonts.md`）。
 - 含 `layers`/`scenarios` 的文件默认要输出多个 SVG 写不进 stdout，`--target=` 已解决（只渲染主板）；渲染指定层用 `d2 file.d2 --target=layers.x.* out`。
 - 预览内支持 board 跳转：单板渲染时 d2 给 `.link: layers.xxx` 节点生成 `root.*` 路由链接，`browserWindow.ts` 识别后用对应 `--target` 重新编译（board 路径大小写敏感，不能用 toLowerCase）；跳转只认 d2 自带的 `.appendix-icon` 角标（渲染在 `<a>` 外面、无 DOM 嵌套关系，webview 按几何重叠面积关联到 `<a>`）。返回是浏览器式历史栈：`D2P.boardHistory`，角标跳转压栈、返回按钮弹栈（`navigateBack` 消息），新开预览窗口时清空并重置回主板。坑：`#toolbar` 必须 `box-sizing: border-box`，否则 width:100% + padding 使工具栏溢出视口，绝对定位在其右缘的返回按钮被推出屏幕外。
 - 场景（scenarios）是整图的变体、不属于任何节点，**不用节点 `.link`**（那是图层的语义）；预览左上角有场景切换栏（"场景：基础 xxx yyy"）：`boardParser.ts` 解析顶层 scenarios 一级键（d2 CLI 没有"列出 boards"的命令），随 render 消息发给 webview，点击发 `selectBoard`（board 路径 `""`=基础 / `scenarios.名字`），跳转与角标同机制（压历史栈）。已知限制：d2 渲染非 root 板时，板内指向兄弟场景/回主板的链接 href 不带 `root.` 前缀（裸名、`..\index`），插件不识别，预览内从场景板内部发起的这类跳转不可用（浏览器打开目录渲染 SVG 不受影响）。
-- TALA 已内置开源；sketch 手写体只覆盖英文，中文用黑体是预期行为。
+- TALA 已内置开源；sketch 手写体只覆盖英文，中文用黑体是预期行为（d2 的 sketch 字体 Fuzzy Bubbles 无 CJK 字形，无法靠参数绕过；合并字体方案已验证可行但未采纳，见 `docs/sketch-cjk-fonts.md`）。
 
 ## 深度研究文档
 
 board 导航相关（layers/scenarios 语义、`.link` 与 href 格式规则、`@` 导入语法、场景栏预览实现、SVG 内场景栏可行性、复测方法）见 **`docs/board-navigation.md`**——动手改跳转/场景栏/导入相关功能前先读它，里面有全部已验证结论，避免重做 CLI 实验。
+
+sketch 与字体相关（sketch 为何没有中文手写体、`--font-*` 重置其余槽位的陷阱、simhei 默认值在 sketch 下为何有害、合并字体方案、字体回退报错辨析、复测方法）见 **`docs/sketch-cjk-fonts.md`**——动手改导出字体/`exportFontPath`/sketch 相关功能前先读它。
 
 更多细节见 tech-doc 仓库 `工具/D2/修改 D2 VSCode 插件.md`（水印等章节已过时，以本文件为准）。

@@ -127,8 +127,8 @@ See https://code.visualstudio.com/docs/editor/extension-marketplace#_install-fro
 ```sh
 npm install -g @vscode/vsce
 npm run pkg
-# To install:
-# code --install-extension d2.vsix
+# To install (the packaged file is named with the build date, e.g. d2.1-261005.vsix):
+# code --install-extension d2.1-<YYMMDD>.vsix
 # To uninstall:
 # code --uninstall-extension terrastruct.d2
 ```
