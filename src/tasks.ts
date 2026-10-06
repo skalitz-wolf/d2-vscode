@@ -137,7 +137,11 @@ class D2Tasks {
     // 会触发字体回退；而 Windows 上的回退解析有 bug（回退字体总量超 128MB 限制，
     // 落到 malgun.ttf 直接报错）。显式指定一个覆盖中文的 .ttf 即可绕过。
     // 注意：Deng.ttf/Dengb.ttf 实测有文本测量 bug（连接线标签高度被量成 0），勿作默认。
-    const exportFont = this.resolveExportFont(ws.get<string>("exportFontPath", ""));
+    // 传 sketch 是因为 sketch 下不能塞隐式默认字体（原因见 resolveExportFont 注释）
+    const exportFont = this.resolveExportFont(
+      ws.get<string>("exportFontPath", ""),
+      sketch
+    );
 
     const args: string[] = [
       // 同 compile()：--target= 只渲染主 board，避免多板文件无法写 stdout 报错
@@ -246,13 +250,31 @@ class D2Tasks {
   /**
    * 解析导出位图（PNG/PDF/PPTX/GIF）时传给 d2 的字体文件路径。
    *
-   * 优先级：用户配置 D2.exportFontPath（非空且存在）> Windows 自带 simhei.ttf > 不传（d2 默认行为）。
+   * 优先级：用户配置 D2.exportFontPath（非空且存在）> 非 sketch 时 Windows 自带
+   * simhei.ttf > 不传（d2 默认行为）。
    * d2 只接受 .ttf，Windows 的微软雅黑是 .ttc 用不了，所以默认选 simhei.ttf。
+   *
+   * 为什么 sketch 下必须跳过隐式默认（2026-10-02 实测）：
+   * d2 的 sketch 模式会把正文字体换成内置的 Fuzzy Bubbles（纯拉丁手写体，577 个
+   * 字形、CJK 字形数为 0）。而 d2 只要收到**任意一个** --font-* 参数，就会把**其余
+   * 槽位全部重置**回 Source Sans Pro——即 d2 自带的 sketch 字体被整体丢弃。
+   * 于是传 simhei 的后果是：英文手写体被换成黑体（原本正常的部分反而被破坏），
+   * 中文也并没有变成手写体（simhei 本身不是手写体）。实测同一份文件 sketch 导出：
+   *   不传字体 → 英文手写体 ✅、中文黑体回退；传 simhei → 英文变黑体 ❌、中文黑体。
+   * 所以 sketch 下不塞隐式默认，把 d2 的原生 sketch 字体留给英文；
+   * 用户若显式配置了 exportFontPath，仍然尊重（他知道自己在换字体）。
    */
-  private resolveExportFont(configured: string): string | undefined {
+  private resolveExportFont(
+    configured: string,
+    sketch: boolean = false
+  ): string | undefined {
     const trimmed = (configured ?? "").trim();
     if (trimmed) {
       return existsSync(trimmed) ? trimmed : undefined;
+    }
+    // sketch 下 d2 自带拉丁手写体，隐式替换只会破坏它（中文反正都不是手写体）
+    if (sketch) {
+      return undefined;
     }
     const candidate = path.join(
       process.env.SystemRoot ?? "C:\\Windows",
