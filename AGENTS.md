@@ -17,10 +17,12 @@
 yarn install --frozen-lockfile   # node_modules/ 存在则跳过
 yarn run package                 # webpack production → dist/extension.js
 yarn run pkg                     # vsce → d2.1-YYMMDD.vsix（带打包当天日期，见下）
-code --install-extension d2.1-<当天YYMMDD>.vsix --force
+yarn run dev                     # 或手动：见下方"装到哪个编辑器"
 ```
 
-产物名带打包当天的本地日期（2026-10-05 打包 → `d2.1-261005.vsix`），旧日期的产物不会被覆盖。装的时候把 `<当天YYMMDD>` 换成实际日期，或用一条命令搞定打包+安装的 `yarn run dev`（它自己算好文件名并复用，不存在跨零点错配）。
+产物名带打包当天的本地日期（2026-10-05 打包 → `d2.1-261005.vsix`），旧日期的产物不会被覆盖。`yarn run dev` 一条命令搞定打包+安装，文件名只算一次（不存在跨零点错配）。
+
+**装到哪个编辑器**：PATH 上的 `code` 可能是别的编辑器（本机指向 Cursor），别直接用它。`yarn run dev` 会自动挑 PATH 里带 "Microsoft VS Code" 的 `code.cmd`，也可用 `CODE_CLI=<路径>` 显式指定。手动安装要写全路径，例如 `"D:/Programs/Microsoft VS Code/bin/code.cmd" --install-extension d2.1-<当天YYMMDD>.vsix --force`。
 
 `pkg`/`dev` 用 **niu**（Niubash，bash 兼容 shell，需在 PATH 上）计算日期——`cmd` 没有 `$(...)`，且其 `%DATE%` 受系统语言影响不可解析。只在 `pkg`/`dev` 内显式调用 niu，**不要**用 yarn 的 `script-shell` 全局配置：那会连带让 `yarn package`（webpack 编译）也走 niu，而 CI 跑在 Linux 没有 niu，编译步骤会直接失败。
 
