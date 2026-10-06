@@ -6,6 +6,8 @@
 
 ## 1. 语义模型：为什么图层和场景的交互设计不同
 
+> 术语正名见根目录 `GLOSSARY.md`（board / layer / scenario / board path 等）；本节讲的是它们的设计取舍与实现结论。
+
 | | layers（图层） | scenarios（场景） |
 |---|---|---|
 | 本质 | 某个关注点的**下钻细节**，独立成图（**不**继承主板） | 整张基础图的**变体**（继承主板 + 增量） |
@@ -42,6 +44,7 @@ board 可任意嵌套（场景里套图层、图层里套场景），`--target` 
 - **角标跳转（图层）**：d2 的角标 `.appendix-icon` 渲染在 `<a>` **外面**（无 DOM 嵌套），webview 按包围盒重叠面积几何关联；board 路径大小写敏感，不能 toLowerCase
 - **场景栏（场景）**：`boardParser.ts` 解析源码顶层 `scenarios:` 一级键（d2 CLI 没有"列出 boards"的命令，只能自己解析）→ 随 `render` 消息发 `scenarios` 数组 → webview 渲染 chips（`基础` 固定第一项）→ 点击发 `selectBoard`（board 路径 `""`=主板 / `scenarios.名字`）→ 与角标同机制跳转（压历史栈）
 - **历史栈**：`D2P.boardHistory`，显式跳转（角标/场景栏）压栈、返回按钮弹栈、后退本身不压栈，新开预览窗口清空
+- **工具栏不能溢出视口**：`#toolbar` 必须 `box-sizing: border-box`——默认 content-box 下 `width:100%` 只算内容宽，加上左右 padding 后工具栏比视口宽，绝对定位在右缘的返回按钮被推出屏幕外
 - **boardParser 容错设计**：括号深度扫描，处理带空格裸键、引号键、`|md` 文本块内的 `{}`/`:`/`#`、`@导入` 值（无花括号）、无冒号裸键（空 board，d2 允许）、单行块；任何异常只丢当前键，不影响其余解析。测试样例见本文 git 提交信息（9 项全过）
 - **单击文字复制（2026-09-23 新增）**：预览里鼠标移到文字上是 I 型光标（提示可划选），**单击即复制该 `<text>` 的整行内容**，被复制文字短暂高亮（`.copy-flash`，600ms）。要点：
   - **d2 文字渲染结构（v0.9.0 实测）**：单行标签 → 一个 `<text>`；多行标签（`"a\nb\nc"`）→ 一个 `<text>` 下每行一个 `<tspan>`；markdown 富文本 → `<g class="md md-native">` 下**并列多个** `<text>`（粗体/斜体/普通各一片）；`--sketch` 下文字仍是 `<text>`
@@ -51,6 +54,7 @@ board 可任意嵌套（场景里套图层、图层里套场景），`--target` 
   - **剪贴板**：主路径 `navigator.clipboard.writeText`（VS Code webview 宿主为内层 iframe 声明了 `clipboard-write`，无需扩展端参与），失败退化为离屏 textarea + `execCommand('copy')`；全程 `try/catch`，**绝不外抛**——预览页脚本一旦崩，缩放/平移/跳转一起失效。复制**不新增任何扩展端消息通道**
   - **高亮为何改 `fill` 而非背景色**：SVG `<text>` 没有可靠的背景绘制面；d2 把 `fill` 写在元素的**表现属性**上（优先级低于任何 CSS 规则），故 `.copy-flash { fill: var(--vscode-textLink-foreground) }` 能稳定覆盖。色值取 `textLink` 而非选区底色：后者当字形颜色用时在浅色主题白底上几乎看不见
   - **不改动扩展端**：只改 `pages/previewPage.html`，该文件**不走 webpack**，改完关闭重开预览面板即生效，**不需要** `yarn run package` 与重装 vsix
+  - **三击复制不再带尾换行（2026-10-06 修复）**：三击选中整行后 `getSelection().toString()` 是 `"grill-with-docs\n"`——d2 的文字节点里没有行尾空白，选区终点只能落在元素边界（`<text>` 或 `<tspan>`）上，浏览器序列化时补一个 `\n`，粘贴时会多跳一行。修法是在 `document` 上挂 `copy` 监听，把选区文本末尾的 `[\r\n]+` 去掉并用 `setData("text/plain", ...)` 写回。三个要点：**①** 必须 `preventDefault()`，否则浏览器用自己那份带换行的数据覆盖 `setData` 的结果（实测）；**②** 用 `sel.anchorNode.closest("#previewWrapper")` 限定只处理预览图内的选区，编辑器/工具栏复制不受影响；**③** 只删**末尾**换行，选区**内部**的换行照旧（跨两个并列 `<text>` 划选仍得 `"grill-with-docs\n使用时机：…"`）。**注意**：多行标签的 `<tspan>` 之间浏览器序列化时**本来就不加分隔符**（整块划选得 `"line oneline twoline three"`），这是既有限制，与本次修复无关（单击复制走的是自己拼接的路径，不受影响）。副作用：复制只剩 `text/plain`，丢掉浏览器附带的 `text/html` 片段（与单击复制行为一致，可接受）。本修复需在**真实浏览器**里验证——`jsdom` 不实现原生三击的选区序列化，测不出这个 `\n`
 
 ## 5. SVG 内做场景栏（未实现，已研究可行）
 
