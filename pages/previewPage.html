@@ -573,6 +573,32 @@
         });
       }
 
+      // 修改：三击（或划选到行尾）后粘贴会多出一个换行。原因：d2 的文字节点
+      // 里没有行尾空白，选区终点只能落在元素边界上，浏览器序列化时会补一个
+      // "\n"（"grill-with-docs\n"），粘贴时于是跳到下一行。这里在复制事件里
+      // 把选区文本末尾的换行去掉；只处理预览图内、且确实以换行结尾的选区，
+      // 编辑器划选、工具栏等其它复制一律不动。preventDefault 是必需的：不拦截
+      // 的话浏览器会用自己那份带换行的数据覆盖 setData 的结果（实测如此）。
+      // 代价是丢掉 text/html 附加格式，只留纯文本——与单击复制的行为一致。
+      document.addEventListener("copy", function (event) {
+        try {
+          var sel = window.getSelection ? window.getSelection() : null;
+          if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return;
+          var text = sel.toString();
+          var trimmed = text.replace(/[\r\n]+$/, "");
+          if (trimmed === text || trimmed === "") return;
+          // 选区两端可能跨节点，取锚点定位即可判断是否落在预览图内
+          var node = sel.anchorNode;
+          var el = node && node.nodeType === 1 ? node : node && node.parentNode;
+          if (!el || !el.closest || !el.closest("#previewWrapper")) return;
+          if (!event.clipboardData) return;
+          event.clipboardData.setData("text/plain", trimmed);
+          event.preventDefault();
+        } catch (e) {
+          // 复制路径绝不外抛：预览页脚本一旦崩溃，缩放/平移/跳转一起失效
+        }
+      });
+
       window.addEventListener("DOMContentLoaded", () => {
         init();
       });
