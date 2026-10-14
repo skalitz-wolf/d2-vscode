@@ -47,3 +47,17 @@ sketch 与字体相关（sketch 为何没有中文手写体、`--font-*` 重置�
 术语正名（board / layer / scenario / board path 等）见根目录 **`GLOSSARY.md`**。
 
 更多细节见 tech-doc 仓库 `工具/D2/修改 D2 VSCode 插件.md`（水印等章节已过时，以本文件为准）。
+
+## Agent skills
+
+### Issue 追踪
+
+Issues 与 spec 以 markdown 文件存在本仓库 `.scratch/<feature-slug>/`（上游 GitHub Issues 已关闭，不用 `gh`）。见 `docs/agents/issue-tracker.md`。
+
+### Triage 标签
+
+五个默认 triage 角色，取值与角色名相同，落在 issue 文件顶部的 `Status:` 行。见 `docs/agents/triage-labels.md`。
+
+### 领域文档
+
+single-context：根目录一个 `GLOSSARY.md`，ADR 落 `docs/adr/`。见 `docs/agents/domain.md`。
