@@ -4,7 +4,7 @@
 
 ## 规则
 
-- **插件 ID 固定 `d2.1`**（publisher=d2、name=1）。不要改回 Terrastruct：与官方 `terrastruct.d2` ID 相同时，VS Code 会把本插件当成官方插件的本地副本，检查更新/修复时被市场版本覆盖（2026-09-18 实际发生过）。命令名与设置项来自 `contributes` 声明，与 ID 无关。
+- **插件 ID 固定 `mine.d2`**（publisher=mine、name=d2）。不要改回 Terrastruct：与官方 `terrastruct.d2` ID 相同时，VS Code 会把本插件当成官方插件的本地副本，检查更新/修复时被市场版本覆盖（2026-09-18 实际发生过，当时 ID 为 `Terrastruct.d2`、版本 `0.8.81` 高于官方 `0.8.8`，仍被覆盖回 `0.8.8`）。命令名与设置项来自 `contributes` 声明，与 ID 无关。
 - **不要主动升级 `package.json` 的 `version`**，用户明确要求才改；重装用 `--force` 覆盖。版本号只能 3 段（vsce 拒绝 4 段）。
 - 注释写高价值中文注释（设计意图、边界条件），不写逐行解释。
 - 水印功能已整体删除（2026-09-17），不要恢复。
@@ -16,13 +16,13 @@
 ```bash
 yarn install --frozen-lockfile   # node_modules/ 存在则跳过
 yarn run package                 # webpack production → dist/extension.js
-yarn run pkg                     # vsce → d2.1-YYMMDD.vsix（带打包当天日期，见下）
+yarn run pkg                     # vsce → d2-YYYYMMDD.vsix（带打包当天日期，见下）
 yarn run dev                     # 或手动：见下方"装到哪个编辑器"
 ```
 
-产物名带打包当天的本地日期（2026-10-05 打包 → `d2.1-261005.vsix`），旧日期的产物不会被覆盖。`yarn run dev` 一条命令搞定打包+安装，文件名只算一次（不存在跨零点错配）。
+产物名带打包当天的本地日期（2026-10-16 打包 → `d2-20261016.vsix`），旧日期的产物不会被覆盖。`yarn run dev` 一条命令搞定打包+安装，文件名只算一次（不存在跨零点错配）。
 
-**装到哪个编辑器**：PATH 上的 `code` 可能是别的编辑器（本机指向 Cursor），别直接用它。`yarn run dev` 会自动挑 PATH 里带 "Microsoft VS Code" 的 `code.cmd`，也可用 `CODE_CLI=<路径>` 显式指定。手动安装要写全路径，例如 `"D:/Programs/Microsoft VS Code/bin/code.cmd" --install-extension d2.1-<当天YYMMDD>.vsix --force`。
+**装到哪个编辑器**：PATH 上的 `code` 可能是别的编辑器（本机指向 Cursor），别直接用它。`yarn run dev` 会自动挑 PATH 里带 "Microsoft VS Code" 的 `code.cmd`，也可用 `CODE_CLI=<路径>` 显式指定。手动安装要写全路径，例如 `"D:/Programs/Microsoft VS Code/bin/code.cmd" --install-extension d2-<当天YYYYMMDD>.vsix --force`（装前先卸掉旧 ID 的残留：`--uninstall-extension d2.1`，换 ID 后新旧扩展会并存）。
 
 `pkg`/`dev` 用 **niu**（Niubash，bash 兼容 shell，需在 PATH 上）计算日期——`cmd` 没有 `$(...)`，且其 `%DATE%` 受系统语言影响不可解析。只在 `pkg`/`dev` 内显式调用 niu，**不要**用 yarn 的 `script-shell` 全局配置：那会连带让 `yarn package`（webpack 编译）也走 niu，而 CI 跑在 Linux 没有 niu，编译步骤会直接失败。
 

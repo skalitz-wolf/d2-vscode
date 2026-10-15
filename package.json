@@ -1,7 +1,7 @@
 {
-  "name": "1",
-  "displayName": "D2.1",
-  "publisher": "d2",
+  "name": "d2",
+  "displayName": "Mine D2",
+  "publisher": "mine",
   "description": "Support for .d2 files.",
   "version": "0.8.8",
   "license": "BSD-3-Clause",
@@ -463,9 +463,9 @@
     "compile": "webpack",
     "watch": "webpack --watch --devtool source-map",
     "package": "webpack --mode production --devtool hidden-source-map",
-    "dev": "niu -c \"f=d2.1-$(date +%y%m%d).vsix; c=${CODE_CLI:-}; if [ -z \\\"$c\\\" ]; then c=$(echo \\\"$PATH\\\" | tr ';' '\\n' | while IFS= read -r d; do case \\\"$d\\\" in *'Microsoft VS Code'*) if [ -x \\\"$d/code.cmd\\\" ]; then echo \\\"$d/code.cmd\\\"; break; fi;; esac; done); fi; [ -z \\\"$c\\\" ] && c=code; \\\"$c\\\" --uninstall-extension terrastruct.d2; yarn gen && vsce package --out $f && \\\"$c\\\" --install-extension $f --force\"",
+    "dev": "niu -c \"f=d2-$(date +%Y%m%d).vsix; c=${CODE_CLI:-}; if [ -z \\\"$c\\\" ]; then c=$(echo \\\"$PATH\\\" | tr ';' '\\n' | while IFS= read -r d; do case \\\"$d\\\" in *'Microsoft VS Code'*) if [ -x \\\"$d/code.cmd\\\" ]; then echo \\\"$d/code.cmd\\\"; break; fi;; esac; done); fi; [ -z \\\"$c\\\" ] && c=code; \\\"$c\\\" --uninstall-extension terrastruct.d2; \\\"$c\\\" --uninstall-extension d2.1; yarn gen && vsce package --out $f && \\\"$c\\\" --install-extension $f --force\"",
     "gen": "yq -o=json . syntaxes/d2.tmLanguage.yaml > syntaxes/d2.tmLanguage.json",
-    "pkg": "niu -c \"vsce package --out d2.1-$(date +%y%m%d).vsix\""
+    "pkg": "niu -c \"vsce package --out d2-$(date +%Y%m%d).vsix\""
   },
   "devDependencies": {
     "@eslint-community/eslint-utils": "^4.4.1",
