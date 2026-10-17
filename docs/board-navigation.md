@@ -43,8 +43,17 @@ board 可任意嵌套（场景里套图层、图层里套场景），`--target` 
 
 - **角标跳转（图层）**：d2 的角标 `.appendix-icon` 渲染在 `<a>` **外面**（无 DOM 嵌套），webview 按包围盒重叠面积几何关联；board 路径大小写敏感，不能 toLowerCase
 - **场景栏（场景）**：`boardParser.ts` 解析源码顶层 `scenarios:` 一级键（d2 CLI 没有"列出 boards"的命令，只能自己解析）→ 随 `render` 消息发 `scenarios` 数组 → webview 渲染 chips（`基础` 固定第一项）→ 点击发 `selectBoard`（board 路径 `""`=主板 / `scenarios.名字`）→ 与角标同机制跳转（压历史栈）
+  - **与按钮同一行（2026-10-17）**：工具栏改为 `display:flex; flex-wrap:nowrap`，场景栏 `flex:1 1 auto; min-width:0` 占满剩余宽度并横向滚动。实测 320–1000px 全部保持 38px 单行，不再折到第二行
+  - **去掉「场景：」前缀**：它固定占 48px，是场景栏里最大的一块开销；chips 本身有选中态、`基础` 打头已足够表意
+  - **chip 超长截断**：`max-width:12em` + 省略号，完整名字放 `title` 悬停查看（横向滚动条太细、容易误触，截断更好用）
+  - **当前项自动可见**：切换后 `scrollIntoView({block:"nearest", inline:"nearest"})`，场景多时也能看到选中了哪个
+  - **工具栏右侧只留 45px**：原先 `padding-right:200px` 是给返回按钮预留的，但按钮只有 25px，多出的 175px 白吃场景栏宽度
+  - **`margin-top` 改为实测值**：`syncToolbarHeight()` 在 render 与 resize 后把工具栏高度写进 `#previewWrapper.style.marginTop`（工具栏高 + 4）。原先写死 45px，工具栏一旦变高（窄面板/多场景）就会盖住图的上沿
+  - **缩放滑块已删除（2026-10-17）**：占 129px 且用户不用；缩放保留 `−`/`+` 按钮、百分比显示与 Ctrl+滚轮三个入口。删除时同步清掉 4 处 `zoomSlider.value` 赋值，否则 `null.value` 会抛异常并打断整个预览脚本
 - **历史栈**：`D2P.boardHistory`，显式跳转（角标/场景栏）压栈、返回按钮弹栈、后退本身不压栈，新开预览窗口清空
 - **工具栏不能溢出视口**：`#toolbar` 必须 `box-sizing: border-box`——默认 content-box 下 `width:100%` 只算内容宽，加上左右 padding 后工具栏比视口宽，绝对定位在右缘的返回按钮被推出屏幕外
+- **Fit Both 曾整体偏下、底部被切（2026-10-17 修复）**：原实现按写死的 45px 工具栏算可用高度（`heightPct = (visualViewport.height - 45)/svgHeight`），且 `panY` 公式里的 +25 也是凑出来的；实测 900×700 时图顶距工具栏 52px、图底超出视口 45px。改为按实测工具栏高度算可用区域，并把 `panY` 直接取剩余留白的一半
+- **Fit / Fit Both 的尺寸来源**：d2 外层 `<svg>` 只有 `viewBox`、没有 `width/height`，浏览器会把它撑满 `#previewWrapper`；因此「未缩放的布局尺寸」= `getBoundingClientRect().width / (zoomLevel/100)`。**不要**改用 viewBox 宽——那是原始尺寸，拿它除容器宽会得到 233%，图被放大两倍多并横向溢出（2026-10-17 实测踩过）
 - **boardParser 容错设计**：括号深度扫描，处理带空格裸键、引号键、`|md` 文本块内的 `{}`/`:`/`#`、`@导入` 值（无花括号）、无冒号裸键（空 board，d2 允许）、单行块；任何异常只丢当前键，不影响其余解析。测试样例见本文 git 提交信息（9 项全过）
 - **单击文字复制（2026-09-23 新增）**：预览里鼠标移到文字上是 I 型光标（提示可划选），**单击即复制该 `<text>` 的整行内容**，被复制文字短暂高亮（`.copy-flash`，600ms）。要点：
   - **d2 文字渲染结构（v0.9.0 实测）**：单行标签 → 一个 `<text>`；多行标签（`"a\nb\nc"`）→ 一个 `<text>` 下每行一个 `<tspan>`；markdown 富文本 → `<g class="md md-native">` 下**并列多个** `<text>`（粗体/斜体/普通各一片）；`--sketch` 下文字仍是 `<text>`
@@ -83,7 +92,7 @@ board 可任意嵌套（场景里套图层、图层里套场景），`--target` 
 - webview UI：`pages/previewPage.html` 可用本地 http 服务 + Browser pane 测（stub `acquireVsCodeApi`，`window.postMessage` 驱动 render 消息），历史上有过此法抓出工具栏溢出 bug
 - **自动化回归 harness**：同法可用 jsdom 无头跑（无需真实浏览器）。要点：stub `acquireVsCodeApi`、补 `window.visualViewport`（jsdom 无布局，`zoomFit` 依赖它）、给 `navigator.clipboard` 装可控 mock（可切成功/失败）、并 shim `innerText`（jsdom 未实现，赋值是**静默 no-op**，会让场景栏/百分比断言假失败）。断言直接读 `wrapper.style.transform`、元素 class、`getSelection().isCollapsed`，用真实 d2 SVG 驱动 render 消息。2026-09-23 实测 49 项全过
 - **jsdom harness 的三个坑**（都会造成假失败，不补就是白跑）：`innerText` 未实现（赋值是**静默 no-op**，场景栏/百分比断言永远读不到值）、`visualViewport` 缺失（`zoomFit` 依赖它）、`postMessage` 强制要 `targetOrigin`（而页面内用的是单参形式，真实 webview 允许）。另注意 `postMessage` 是**异步派发**，断言前必须等一拍
-- **已修复：缩放百分比滞后 + 滑块拖动崩溃（2026-09-23）**。原 `setZoomLevel()` 顺序为「先 `setZoomText()`、后赋 `zoomLevel`」，而前者读的正是 `zoomLevel` → 百分比**滞后一步**（`setZoomLevel(250)` 后显示 100%）。同一行还有个更严重的：`zoomSlider.value` 与扩展端消息传的都是**字符串**，原样存进 `zoomLevel` 后，下一次 `setZoomText()` 因字符串无 `.toFixed` 抛 `TypeError`，而预览页是**单个 `<script>` 块**——一次未捕获异常就让缩放/平移/跳转/场景栏全失效。修法：顺序改为「先赋值后刷新」并与本来就正确的 `zoomTo`/`zoomFit` 对齐，同时 `zoomLevel = Number(zl)` 把「数值」确立为该变量的不变式。两处缺陷均可追溯到 `bc5f8cb`，属上游遗留。复现方法：拖滑块两次即崩；或调 `setZoomLevel(250)` 看百分比停在 100%
+- **已修复：缩放百分比滞后 + 滑块拖动崩溃（2026-09-23；滑块已于 2026-10-17 删除，本条留作历史）**。原 `setZoomLevel()` 顺序为「先 `setZoomText()`、后赋 `zoomLevel`」，而前者读的正是 `zoomLevel` → 百分比**滞后一步**（`setZoomLevel(250)` 后显示 100%）。同一行还有个更严重的：`zoomSlider.value` 与扩展端消息传的都是**字符串**，原样存进 `zoomLevel` 后，下一次 `setZoomText()` 因字符串无 `.toFixed` 抛 `TypeError`，而预览页是**单个 `<script>` 块**——一次未捕获异常就让缩放/平移/跳转/场景栏全失效。修法：顺序改为「先赋值后刷新」并与本来就正确的 `zoomTo`/`zoomFit` 对齐，同时 `zoomLevel = Number(zl)` 把「数值」确立为该变量的不变式。两处缺陷均可追溯到 `bc5f8cb`，属上游遗留。复现方法：拖滑块两次即崩；或调 `setZoomLevel(250)` 看百分比停在 100%
 
 ## 8. 相关文件
 
