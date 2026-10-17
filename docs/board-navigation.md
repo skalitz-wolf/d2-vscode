@@ -62,7 +62,7 @@ board 可任意嵌套（场景里套图层、图层里套场景），`--target` 
   - **分支优先级**：`.appendix-icon` 角标跳转 > 文字复制 > 平移。复制分支的选择器写成 `#previewWrapper text`（限定在预览容器内，避免工具栏里将来出现 `<text>` 时误触发）
   - **剪贴板**：主路径 `navigator.clipboard.writeText`（VS Code webview 宿主为内层 iframe 声明了 `clipboard-write`，无需扩展端参与），失败退化为离屏 textarea + `execCommand('copy')`；全程 `try/catch`，**绝不外抛**——预览页脚本一旦崩，缩放/平移/跳转一起失效。复制**不新增任何扩展端消息通道**
   - **高亮为何改 `fill` 而非背景色**：SVG `<text>` 没有可靠的背景绘制面；d2 把 `fill` 写在元素的**表现属性**上（优先级低于任何 CSS 规则），故 `.copy-flash { fill: var(--vscode-textLink-foreground) }` 能稳定覆盖。色值取 `textLink` 而非选区底色：后者当字形颜色用时在浅色主题白底上几乎看不见
-  - **不改动扩展端**：只改 `pages/previewPage.html`，该文件**不走 webpack**，改完关闭重开预览面板即生效，**不需要** `yarn run package` 与重装 vsix
+  - **改完必须重新打包安装**：只改 `pages/previewPage.html` 确实不涉及扩展端逻辑，但它虽然**不走 webpack**，扩展运行时是从**安装目录**（`extContext.extensionPath`）读这份文件的。所以改完必须 `yarn run dev` 重新打包安装 + Reload Window，**关掉重开预览面板不会生效**。2026-10-17 实际踩过（安装目录里仍是 39536 字节的旧版），详见 `docs/packaging.md`
   - **三击复制不再带尾换行（2026-10-06 修复）**：三击选中整行后 `getSelection().toString()` 是 `"grill-with-docs\n"`——d2 的文字节点里没有行尾空白，选区终点只能落在元素边界（`<text>` 或 `<tspan>`）上，浏览器序列化时补一个 `\n`，粘贴时会多跳一行。修法是在 `document` 上挂 `copy` 监听，把选区文本末尾的 `[\r\n]+` 去掉并用 `setData("text/plain", ...)` 写回。三个要点：**①** 必须 `preventDefault()`，否则浏览器用自己那份带换行的数据覆盖 `setData` 的结果（实测）；**②** 用 `sel.anchorNode.closest("#previewWrapper")` 限定只处理预览图内的选区，编辑器/工具栏复制不受影响；**③** 只删**末尾**换行，选区**内部**的换行照旧（跨两个并列 `<text>` 划选仍得 `"grill-with-docs\n使用时机：…"`）。**注意**：多行标签的 `<tspan>` 之间浏览器序列化时**本来就不加分隔符**（整块划选得 `"line oneline twoline three"`），这是既有限制，与本次修复无关（单击复制走的是自己拼接的路径，不受影响）。副作用：复制只剩 `text/plain`，丢掉浏览器附带的 `text/html` 片段（与单击复制行为一致，可接受）。本修复需在**真实浏览器**里验证——`jsdom` 不实现原生三击的选区序列化，测不出这个 `\n`
 
 ## 5. SVG 内做场景栏（未实现，已研究可行）
