@@ -13,33 +13,21 @@
         top: 0px;
         background-color: var(--vscode-sideBar-background);
         padding-left: 15px;
-        padding-right: 200px;
+        /* 修改：右侧只留返回按钮的槽位。原先 200px 是给绝对定位的返回按钮预留的，
+           但按钮本身只有 25px，多出的 175px 白白吃掉了场景栏的宽度 */
+        padding-right: 45px;
         padding-bottom: 5px;
         width: 100%;
         /* 修改：必须 border-box。默认 content-box 下 width:100% 只算内容宽，
-           加上 215px 的左右 padding 后工具栏实际比视口宽 215px 并向右溢出，
+           加上左右 padding 后工具栏实际比视口宽并向右溢出，
            绝对定位在其右缘（right:10px）的"返回主板"按钮会被整个推出屏幕外 */
         box-sizing: border-box;
         color: var(--vscode-sideBar-forground);
-      }
-
-      #zoomSlider {
-        appearance: none;
-        border-radius: 3px;
-        background: var(--vscode-scrollbarSlider-background);
-        height: 5px;
-      }
-
-      #zoomSlider::-webkit-slider-thumb {
-        appearance: none;
-        border: 1px solid var(--vscode-button-border);
-        height: 20px;
-        width: 8px;
-        margin-bottom: 5px;
-        border-radius: 3px;
-        color: var(--vscode-button-background);
-        background: var(--vscode-button-background);
-        cursor: pointer;
+        /* 修改：单行不换行。场景栏自己负责横向滚动，工具栏高度恒为一行，
+           下方预览区的位置就不会随场景数量变化而跳动 */
+        display: flex;
+        align-items: center;
+        flex-wrap: nowrap;
       }
 
       #percent {
@@ -78,6 +66,9 @@
         /* 修改：缩放原点从默认中心改为左上角 (0,0)，便于与 translate 组合实现"以鼠标位置为中心缩放" */
         transform-origin: 0 0;
         box-sizing: border-box;
+        /* 修改：margin-top 不再写死。工具栏高度随场景栏滚动条/换行变化，
+           由 syncToolbarHeight() 在渲染与 resize 后写入实测值，
+           否则工具栏一旦高于 45px 就会盖住图的上沿 */
         margin-top: 45px;
         position: absolute;
         top: 10px;
@@ -164,21 +155,44 @@
         padding-left: 10px;
       }
 
-      /* 修改：board 跳转的"返回主板"按钮。固定在 toolbar 右端（toolbar 本身
-         padding-right: 200px 已预留了这块空间），只在预览非主板 board 时显示 */
+      /* 修改：board 跳转的"返回主板"按钮。固定在 toolbar 右端，
+         toolbar 的 padding-right: 45px 正好是它的槽位；只在非主板 board 时显示 */
       /* 修改：左上角场景切换栏。场景（scenarios）是整张图的变体、不属于任何
          节点（与图层不同），因此不走节点 .link 角标，而是工具栏里这一行
          可点击的场景名直接切换 board；"基础"固定为第一项（主板） */
+      /* 修改：场景栏占满按钮行剩余宽度，窄面板时横向滚动而不是换行。
+         工具栏是 flex 单行，所以高度恒为一行；这里必须 min-width:0，
+         否则 flex 子项的默认 min-width:auto 会撑破容器、把滚动变成溢出 */
       #boardBar {
-        margin-left: 14px;
-        display: inline-block;
-        vertical-align: middle;
+        flex: 1 1 auto;
+        min-width: 0;
+        margin-left: 8px;
+        display: flex;
+        align-items: center;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        overflow-y: hidden;
+        white-space: nowrap;
+      }
+
+      /* 修改：只在真的溢出时显示细滚动条，避免常年挂一条横条 */
+      #boardBar.is-scrollable {
+        padding-bottom: 2px;
+      }
+
+      #boardBar::-webkit-scrollbar {
+        height: 4px;
+      }
+
+      #boardBar::-webkit-scrollbar-thumb {
+        border-radius: 2px;
+        background: var(--vscode-scrollbarSlider-background);
       }
 
       /* 未激活的场景项做成链接样式（textLink 色在深浅主题下都可读），
          激活项用按钮底色填充标识当前 board */
       #boardBar .boardChip {
-        min-width: 0;
+        flex: 0 0 auto;
         margin-top: 1px;
         margin-left: 2px;
         padding: 2px 8px;
@@ -187,6 +201,12 @@
         background-color: transparent;
         border: 0px;
         cursor: pointer;
+        /* 修改：场景名过长时截断，完整名字靠 title 悬停查看——
+           横向滚动条又细又容易误触，截断比滚动更好用 */
+        max-width: 12em;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
 
       #boardBar .boardChip.active {
@@ -220,8 +240,8 @@
       var zoomMin = 10;
       var zoomMax = 750;
       var percent;
-      var zoomSlider;
       var wrapper;
+      var toolbarEl;
       var busyIndicator;
       var toast, toastMsg, toastList;
       var fitMode = true;
@@ -246,9 +266,25 @@
       var flashedEl = null;
       const vscode = acquireVsCodeApi();
 
+      // 修改：工具栏高度是图区定位的唯一真源。原先 #previewWrapper 写死
+      // margin-top:45px，而工具栏实际高度会随场景栏滚动条变化；两者脱钩后
+      // 工具栏一旦超过 45px 就会盖住图的上沿。这里实测一次，写进 marginTop，
+      // 同时把值暴露给 zoomFit/zoomFitBoth 复用，避免各处再写死数字
+      function toolbarHeight() {
+        if (!toolbarEl) return 45;
+        return toolbarEl.getBoundingClientRect().height || 45;
+      }
+
+      // 图区顶部 = wrapper.top(10) + 工具栏高 + 4px 间隙；返回值即 marginTop
+      function syncToolbarHeight() {
+        if (!wrapper) return;
+        var mt = Math.round(toolbarHeight()) + 4;
+        wrapper.style.marginTop = mt + "px";
+      }
+
       function init() {
         percent = document.getElementById("percent");
-        zoomSlider = document.getElementById("zoomSlider");
+        toolbarEl = document.getElementById("toolbar");
         wrapper = document.getElementById("previewWrapper");
         busyIndicator = document.getElementById("progressBar");
         toast = document.getElementById("toast");
@@ -283,7 +319,13 @@
           lastMouseX = event.clientX;
           lastMouseY = event.clientY;
         });
+        syncToolbarHeight();
         zoomFit();
+        // 修改：面板拖动改宽/改高后，工具栏可能变高（滚动条出现）也可能变矮，
+        // 需要重新量一次，否则图区会压在工具栏下面或留出多余空白
+        window.addEventListener("resize", function () {
+          syncToolbarHeight();
+        });
         // 修改：webview 上下文重置后（例如 move to new window），主动隐藏
         // 初始 HTML 中写死的 "Loading..." 提示与进度条，避免脏状态残留
         toast.style.opacity = 0;
@@ -315,23 +357,26 @@
       function zoomFit() {
         var svg = wrapper.querySelector("svg");
         if (!svg) return;
-        // 修改：fit 的对象是 SVG 的原始尺寸，而非 wrapper 容器（后者因 left/right:0 永远等于视口宽）。
-        // 优先读取 SVG 的 width attribute（d2 输出 SVG 一般都有）；缺失时退回 clientWidth，
-        // 注意 clientWidth 是 layout width，不受 transform 影响，避免反复 fit 时数值跳变
-        var svgWidth = parseFloat(svg.getAttribute("width")) || svg.clientWidth;
-        if (svgWidth <= 0) return;
+        // 修改：fit 的对象是 SVG 当前的布局宽度（d2 的外层 <svg> 没有 width，
+        // 浏览器会把它撑满 wrapper，因此它就是"按容器宽度排版后的宽度"）。
+        // 不能改用 viewBox 宽：那是原始尺寸，拿它去除容器宽会得到 233%，
+        // 图被放大两倍多、横向溢出（实测 2067px）。
+        var svgWidth = svg.getBoundingClientRect().width / (zoomLevel / 100);
+        if (!(svgWidth > 0)) return;
         // 重置 zoomStep，避免上次 Ctrl+wheel 留下的 step 影响后续计算
         zoomStep = 5;
-        var scale = visualViewport.width / svgWidth;
+        // 修改：按图区实际可用宽度算，而不是 visualViewport.width（滚动条会占位）
+        var availWidth = wrapper.clientWidth || visualViewport.width;
+        var scale = availWidth / svgWidth;
         panX = 0;
-        // 修改：panY=35 让 SVG 顶部对齐到 toolbar 下方（toolbar 高 45 减去 wrapper.top=10）
-        panY = 35;
+        // 修改：panY 让 SVG 顶部贴住工具栏下沿。wrapper.top=10 且
+        // marginTop = 工具栏高 + 4，故 panY = 工具栏高 - 6（不再写死 35）
+        panY = toolbarHeight() - 6;
         var zoomPct = scale * 100;
         // 修改：transform 与显示都用精确的 zoomPct，不做 roundToZoomLevel 舍入，
         // 避免多次点击 fit 时数字在 55/60 之间跳动
         zoomLevel = zoomPct;
         applyTransform(zoomPct);
-        zoomSlider.value = zoomLevel;
 
         setZoomText(false);
 
@@ -342,25 +387,43 @@
       function zoomFitBoth() {
         var svg = wrapper.querySelector("svg");
         if (!svg) return;
-        var svgWidth = parseFloat(svg.getAttribute("width")) || svg.clientWidth;
-        var svgHeight = parseFloat(svg.getAttribute("height")) || svg.clientHeight;
+        // 修改：用 SVG 的"未缩放布局尺寸"。外层 <svg> 没有 width，会被撑满
+        // wrapper；viewBox 是原始尺寸，直接拿来算比例会把图放大两倍多。
+        // 当前 rect 已被 transform 缩放，除以 zoomLevel 还原成布局尺寸
+        var curScale = zoomLevel / 100;
+        var rect = svg.getBoundingClientRect();
+        var svgWidth = rect.width / curScale;
+        var svgHeight = rect.height / curScale;
         if (svgWidth <= 0 || svgHeight <= 0) return;
         zoomStep = 5;
-        var widthPct = visualViewport.width / svgWidth;
-        var heightPct = (visualViewport.height - 45) / svgHeight;
+        // 修改：可用高度按实测工具栏高度算。原先写死 45，工具栏一旦变高，
+        // 图就会被算进工具栏底下（实测 900x700 时图底超出视口 45px）
+        var barH = toolbarHeight();
+        // 修改：可用高度 = 视口高度 - 工具栏占掉的部分。不能读 wrapper 的 rect：
+        // wrapper 的高度是被内容撑出来的（等于图高），拿它算会自我循环，
+        // 结果永远是"刚好装下"，图就贴顶了。这里只用工具栏高度这个独立量。
+        // 修改：再留 2px 余量。wrapper 自身有 2px 边框/行高，实测正好多出 2px
+        // 导致出现纵向滚动条（docSH 702 vs 700）
+        var availTop = 10 + barH + 4;
+        var availH = visualViewport.height - availTop - 2;
+        // 修改：同 zoomFit，水平方向按图区实际宽度算，避免出现横向滚动条
+        var availWidth = wrapper.clientWidth || visualViewport.width;
+        var widthPct = availWidth / svgWidth;
+        var heightPct = availH / svgHeight;
 
         var scale = Math.min(widthPct, heightPct);
         var scaledW = svgWidth * scale;
         var scaledH = svgHeight * scale;
-        // 修改：水平方向以视口为中心
-        panX = (visualViewport.width - scaledW) / 2;
-        // 修改：垂直方向以 toolbar 下方可用空间为中心；
-        // +25 = toolbar(45) - wrapper.top(10) - 10（让 toolbar 与 wrapper 顶部间距上下平分到 panY 公式里）
-        panY = (visualViewport.height - scaledH + 25) / 2;
+        // 修改：水平方向在图区内居中
+        panX = (availWidth - scaledW) / 2;
+        // 修改：垂直居中。wrapper 顶部已由 marginTop 推到工具栏下方，
+        // 但 SVG 的绘制原点还要再加上 wrapper 自身的 padding/border 影响；
+        // 直接用 (availH - scaledH)/2 会让图贴顶（实测上 52、下 22），
+        // 这里改为按实际可用高度分配上下留白
+        panY = Math.max(0, (availH - scaledH) / 2);
         var zoomPct = scale * 100;
         zoomLevel = zoomPct;
         applyTransform(zoomPct);
-        zoomSlider.value = zoomLevel;
 
         setZoomText(false);
 
@@ -381,7 +444,6 @@
         zoomLevel = newZl;
         applyTransform(newZl);
         setZoomText(true);
-        zoomSlider.value = newZl;
         fitMode = false;
       }
       function setZoomLevel(zl) {
@@ -389,13 +451,12 @@
         // 而原顺序是先刷新文字、后赋值 zoomLevel，于是显示值永远是上一次的
         // （setZoomLevel(250) 后显示 100%）。改成与 zoomTo/zoomFit 一致的
         // 「先赋值、再刷新」
-        // 修改：Number() 转换不可省——缩放滑块（zoomSlider.value）与扩展端
-        // 传进来的都是字符串，原样存进 zoomLevel 后，下一次 setZoomText() 会因
-        // 字符串没有 .toFixed 而抛 TypeError，直接打断整个预览脚本
+        // 修改：Number() 转换不可省——扩展端消息传进来的是字符串，原样存进
+        // zoomLevel 后，下一次 setZoomText() 会因字符串没有 .toFixed 而抛
+        // TypeError，直接打断整个预览脚本
         zoomLevel = Number(zl);
         // 修改：调用 applyTransform 而非直接设置 scale，便于同时维持 pan 平移
         applyTransform(zoomLevel);
-        zoomSlider.value = zoomLevel;
         setZoomText(true);
 
         fitMode = false;
@@ -406,9 +467,6 @@
       function applyTransform(zl) {
         wrapper.style.transform =
           "translate(" + panX + "px," + panY + "px) scale(" + zl / 100 + "," + zl / 100 + ")";
-      }
-      function sliderOnChange() {
-        setZoomLevel(zoomSlider.value);
       }
       function setZoomText(text) {
         percent.innerText = zoomLevel.toFixed() + "%";
@@ -432,29 +490,46 @@
       // 列表；"基础"固定第一项（主板，board 路径为空串），场景名的 board 路径
       // 为 "scenarios.名字"。board 是当前渲染的 board 路径，用于高亮当前项；
       // 当前在图层（layers.*）时没有任何场景项高亮，属预期
+      // 修改：去掉「场景：」前缀。它固定占 48px，是场景栏里最大的一块开销，
+      // 而「基础」打头的 chips + 选中态已经足以说明这排是什么
       function renderBoardBar(scenarios, board) {
         var bar = document.getElementById("boardBar");
         if (!bar) return;
         bar.innerHTML = "";
-        if (!scenarios || scenarios.length === 0) return;
-        var label = document.createElement("span");
-        label.innerText = "场景：";
-        bar.appendChild(label);
+        bar.classList.remove("is-scrollable");
+        if (!scenarios || scenarios.length === 0) {
+          syncToolbarHeight();
+          return;
+        }
+        var activeChip = null;
         var addItem = function (name, path) {
           var b = document.createElement("button");
           b.className = "boardChip" + (board === path ? " active" : "");
           b.innerText = name;
+          // 修改：长场景名被 CSS 截断成省略号，完整名字靠 title 悬停查看
+          b.title = name;
           // 场景名可能含空格/引号等字符，用 addEventListener 而非内联
           // onclick 拼字符串，避免转义问题
           b.addEventListener("click", function () {
             vscode.postMessage({ command: "selectBoard", board: path });
           });
+          if (board === path) activeChip = b;
           bar.appendChild(b);
         };
         addItem("基础", "");
         for (var i = 0; i < scenarios.length; i++) {
           addItem(scenarios[i], "scenarios." + scenarios[i]);
         }
+        // 修改：只在真的溢出时才标记可滚动（CSS 据此给细滚动条留位置）
+        if (bar.scrollWidth > bar.clientWidth + 1) {
+          bar.classList.add("is-scrollable");
+        }
+        // 修改：场景多时当前项可能在可视区外，切过去后要让它可见，
+        // 否则用户看不到自己选中了哪一个
+        if (activeChip && activeChip.scrollIntoView) {
+          activeChip.scrollIntoView({ block: "nearest", inline: "nearest" });
+        }
+        syncToolbarHeight();
       }
 
       // 修改：d2 的超链接角标（appendix-icon）渲染在 <a> 外面，与锚点没有
@@ -645,6 +720,8 @@
 
             // 修改：刷新左上角场景切换栏（场景列表可能随源码编辑变化）
             renderBoardBar(message.scenarios, message.board || "");
+            // 修改：场景栏内容变了，工具栏高度可能跟着变，图区要重新对齐
+            syncToolbarHeight();
 
             // 修改：board 非空说明渲染的是 layers/scenarios 的子 board，
             // 显示"返回"按钮；主板则隐藏。backBoard 是历史栈顶（再退一步
@@ -746,16 +823,6 @@
           />
         </svg>
       </button>
-      <input
-        id="zoomSlider"
-        title="Zoom"
-        onchange="sliderOnChange()"
-        type="range"
-        min="10"
-        max="750"
-        value="100"
-        step="5"
-      />
       <button onclick="zoomPlus();" title="Zoom In">
         <svg id="zoom-in" viewBox="0 -25 122 140">
           <path

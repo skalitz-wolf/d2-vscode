@@ -30,7 +30,7 @@ d2 为带 `.link` 的节点在右上角画的小图标，是预览内跳转 laye
 _Avoid_: 徽标, badge, 链接图标
 
 **scenario bar**（场景栏）:
-预览工具栏里切换 scenario 的一排 chips，固定以「基础」（root board）打头。
+预览工具栏里切换 scenario 的一排 chips，固定以「基础」（root board）打头；与缩放按钮同一行，宽度不够时横向滚动。
 _Avoid_: 场景切换器, board 栏
 
 **board history**（历史栈）:
