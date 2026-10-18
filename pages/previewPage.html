@@ -195,8 +195,17 @@
       #boardBar .crumb.current {
         color: var(--vscode-foreground);
         font-weight: 600;
-        cursor: default;
         text-decoration: none;
+      }
+
+      /* 修改：当前段一般不可点；但「基础」在有场景时可点开场景下拉，
+         所以要保留手型光标（否则用户不会想到去点它） */
+      #boardBar .crumb.current.has-menu {
+        cursor: pointer;
+      }
+
+      #boardBar .crumb.current.has-menu:hover {
+        text-decoration: underline;
       }
 
       /* 段之间的分隔符，纯装饰，不可点 */
@@ -629,24 +638,35 @@
             }
             var item = items[i];
             var b = document.createElement("button");
-            b.className = "crumb" + (item.current ? " current" : "");
+            b.className = "crumb" + (item.current ? " current" : "") +
+              (item.kind === "root" && hasScenarios ? " has-menu" : "");
             b.innerText = item.name;
             b.title = item.kind === "scenario" ? "场景：" + item.name
               : item.kind === "layer" ? "图层：" + item.name
               : "回到主板";
-            if (!item.current) {
-              (function (it) {
-                if (it.kind === "scenario") {
-                  b.addEventListener("click", function (event) {
+            (function (it) {
+              if (it.kind === "scenario") {
+                // 场景段：弹下拉选场景（scenario 互斥，一次只能选一个）
+                b.addEventListener("click", function (event) {
+                  openScenarioMenu(event.currentTarget);
+                });
+              } else if (it.kind === "root" && hasScenarios) {
+                // 修改：在主板时面包屑只有「基础」一段，没有场景段可点，
+                // 用户会以为场景丢了。有场景时让「基础」也承担下拉入口，
+                // 当前就在基础时点它展开场景列表，否则先回基础。
+                b.addEventListener("click", function (event) {
+                  if (it.current) {
                     openScenarioMenu(event.currentTarget);
-                  });
-                } else {
-                  b.addEventListener("click", function () {
-                    vscode.postMessage({ command: "selectBoard", board: it.path });
-                  });
-                }
-              })(item);
-            }
+                  } else {
+                    vscode.postMessage({ command: "selectBoard", board: "" });
+                  }
+                });
+              } else if (!it.current) {
+                b.addEventListener("click", function () {
+                  vscode.postMessage({ command: "selectBoard", board: it.path });
+                });
+              }
+            })(item);
             bar.appendChild(b);
           }
         };
