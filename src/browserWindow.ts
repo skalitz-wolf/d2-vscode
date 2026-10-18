@@ -19,9 +19,7 @@ export class BrowserWindow {
   lastSvg: string;
   // 最近渲染的 board 路径（空串 = 主板），与 lastSvg 配合用于上下文重置后恢复返回按钮状态
   lastBoard: string;
-  // 最近一次的历史栈顶（null = 无历史），用于上下文重置后恢复按钮提示
-  lastBackBoard: string | null;
-  // 最近一次的场景名列表，用于上下文重置后恢复左上角场景栏
+  // 最近一次的场景名列表，用于上下文重置后恢复面包屑里的场景下拉
   lastScenarios: string[];
 
   constructor(trkObj: D2P) {
@@ -29,7 +27,6 @@ export class BrowserWindow {
     // 修改：初始化为空串，避免 lastSvg 为 undefined
     this.lastSvg = "";
     this.lastBoard = "";
-    this.lastBackBoard = null;
     this.lastScenarios = [];
 
     let fileName = "";
@@ -80,7 +77,6 @@ export class BrowserWindow {
           command: "render",
           data: this.lastSvg,
           board: this.lastBoard,
-          backBoard: this.lastBackBoard,
           scenarios: this.lastScenarios,
         });
         this.webView.postMessage({ command: "hideToast" });
@@ -104,12 +100,11 @@ export class BrowserWindow {
             // board 跳转链接：单板渲染（--target=）时，d2 给 .link: layers.xxx
             // 节点生成 root.* 形式的路由路径（本应交给 d2 --watch 的服务端解析）。
             // 这里识别出来，用对应的 --target 重新编译预览即可实现预览内跳转。
-            // 跳转前把当前 board 压入历史栈，供"返回"按钮逐层后退
+            // 2026-10-18：历史栈已删除，跳转直接生效；回退由面包屑承担
             if (link === "root" || link.startsWith("root.")) {
               const boardPath = link === "root" ? "" : link.slice("root.".length);
               const trk = this.trackerObject;
               if (trk?.inputDoc && boardPath !== trk.currentTarget) {
-                trk.boardHistory.push(trk.currentTarget);
                 previewGenerator.generate(trk.inputDoc, true, boardPath);
               }
               return;
@@ -144,24 +139,14 @@ export class BrowserWindow {
             );
             break;
           }
-          case "navigateBack": {
-            // 浏览器式后退：弹出历史栈顶作为跳转目标。
-            // 后退跳转不压栈（压栈只在角标跳转处做），保证每退一次少一层
-            const trk = this.trackerObject;
-            if (trk?.inputDoc && trk.boardHistory.length > 0) {
-              previewGenerator.generate(trk.inputDoc, true, trk.boardHistory.pop()!);
-            }
-            break;
-          }
           case "selectBoard": {
-            // 左上角场景栏点击切换 board。与角标跳转同一机制：显式跳转前
-            // 压历史栈（之后可用"返回"按钮逐层后退）；点击当前所在 board 忽略。
-            // message.board 是完整 board 路径："" = 主板（"基础"），
-            // "scenarios.X" = 场景 X
+            // 面包屑点击切换 board。message.board 是完整 board 路径：
+            // "" = 主板（"基础"）、"scenarios.X" = 场景 X、
+            // "scenarios.X.layers.Y" = 场景内的图层、"layers.Y" = 纯图层。
+            // 2026-10-18：历史栈已删除，直接跳转；回退由面包屑的上一段承担
             const trk = this.trackerObject;
             const target = (message.board ?? "").trim();
             if (trk?.inputDoc && target !== trk.currentTarget) {
-              trk.boardHistory.push(trk.currentTarget);
               previewGenerator.generate(trk.inputDoc, true, target);
             }
             break;
@@ -181,27 +166,18 @@ export class BrowserWindow {
   // preserveZoom=true 表示本次是 Recompile（用户已经打开了预览，只是重新生成 SVG），
   // webview 端应保留用户的缩放比例和 pan 位置，仅替换 SVG 内容。
   // preserveZoom=false 表示初次预览，正常走 fit 流程。
-  // board 是当前渲染的 board 路径（空串 = 主板），webview 据此显示/隐藏"返回"按钮；
-  // backBoard 是历史栈顶（再点一次"返回"将去到的 board），null 表示无历史可退
+  // board 是当前渲染的 board 路径（空串 = 主板），webview 据此渲染面包屑
   setSvg(svg: string, preserveZoom: boolean = false, board: string = ""): void {
     this.lastSvg = svg;
     this.lastBoard = board;
-    this.lastBackBoard = this.backBoard();
     this.lastScenarios = this.trackerObject?.scenarioList ?? [];
     this.webView.postMessage({
       command: "render",
       data: svg,
       preserveZoom: preserveZoom,
       board: board,
-      backBoard: this.lastBackBoard,
       scenarios: this.lastScenarios,
     });
-  }
-
-  // 历史栈顶的 board（无历史返回 null），随 render 消息发给 webview 做按钮提示
-  private backBoard(): string | null {
-    const hist = this.trackerObject?.boardHistory;
-    return hist && hist.length > 0 ? hist[hist.length - 1] : null;
   }
 
   resetZoom(): void {

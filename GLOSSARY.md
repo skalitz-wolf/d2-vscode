@@ -29,10 +29,10 @@ _Avoid_: target, 路由, 地址
 d2 为带 `.link` 的节点在右上角画的小图标，是预览内跳转 layer 的入口。
 _Avoid_: 徽标, badge, 链接图标
 
-**scenario bar**（场景栏）:
-预览工具栏里切换 scenario 的一排 chips，固定以「基础」（root board）打头；与缩放按钮同一行，宽度不够时横向滚动。
-_Avoid_: 场景切换器, board 栏
+**breadcrumb**（面包屑）:
+预览工具栏里表达当前 board 路径的一行：`基础 › 场景A › 图层B`。第一段固定是 root board，中间段可点回退，当前段不可点；场景段点击弹出场景列表（scenario 互斥，一次只能选一个）。宽度不够时中间段折叠为「…」。
+_Avoid_: 场景栏, 场景切换器, 导航条
 
-**board history**（历史栈）:
-预览内 board 跳转的后退栈：角标与场景栏跳转压栈，返回按钮弹栈。
-_Avoid_: 导航记录, 面包屑
+**scenario bar**（场景栏）:
+2026-10-18 之前的旧称，已被 breadcrumb 取代。
+_Avoid_: 场景栏（改称面包屑）
