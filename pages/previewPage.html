@@ -198,15 +198,6 @@
         text-decoration: none;
       }
 
-      /* 修改：当前段一般不可点；但「基础」在有场景时可点开场景下拉，
-         所以要保留手型光标（否则用户不会想到去点它） */
-      #boardBar .crumb.current.has-menu {
-        cursor: pointer;
-      }
-
-      #boardBar .crumb.current.has-menu:hover {
-        text-decoration: underline;
-      }
 
       /* 段之间的分隔符，纯装饰，不可点 */
       #boardBar .sep {
@@ -627,22 +618,14 @@
           first.title = hasScenarios ? "切换场景" : "回到主板";
           first.setAttribute("data-scenario-crumb", "1");
           if (hasScenarios) {
-            // 悬停即弹；移出延迟关闭，避免鼠标移向菜单时闪
+            // 修改（2026-10-18 简化）：只保留悬停。移入弹、移出延迟关；
+            // 不再有"点击锁定"——那套状态机在"第一段可能没有下拉"时
+            // 语义不自洽，用户也嫌麻烦。
             first.addEventListener("mouseenter", function (event) {
-              if (!menuLocked) openScenarioMenu(event.currentTarget);
+              openScenarioMenu(event.currentTarget);
             });
             first.addEventListener("mouseleave", function () {
               scheduleCloseMenu();
-            });
-            first.addEventListener("click", function (event) {
-              // 点击锁定：锁定时再次点击解锁并关闭
-              if (menuLocked) {
-                menuLocked = false;
-                closeScenarioMenu();
-              } else {
-                menuLocked = true;
-                openScenarioMenu(event.currentTarget);
-              }
             });
           } else if (!scenarioIsCurrent) {
             first.addEventListener("click", function () {
@@ -698,19 +681,10 @@
             first.setAttribute("data-scenario-crumb", "1");
             if (hasScenarios) {
               first.addEventListener("mouseenter", function (event) {
-                if (!menuLocked) openScenarioMenu(event.currentTarget);
+                openScenarioMenu(event.currentTarget);
               });
               first.addEventListener("mouseleave", function () {
                 scheduleCloseMenu();
-              });
-              first.addEventListener("click", function (event) {
-                if (menuLocked) {
-                  menuLocked = false;
-                  closeScenarioMenu();
-                } else {
-                  menuLocked = true;
-                  openScenarioMenu(event.currentTarget);
-                }
               });
             } else if (!scenarioIsCurrent) {
               first.addEventListener("click", function () {
@@ -757,24 +731,10 @@
           paintCollapsed();
         }
         syncToolbarHeight();
-
-        // 修改（2026-10-18）：如果菜单处于锁定状态（用户点了第一段），
-        // 面包屑重画后要把菜单重新挂到新的第一段上——选完场景菜单不能消失。
-        if (menuLocked) {
-          var firstCrumb = bar.querySelector(".crumb.has-menu");
-          if (firstCrumb) {
-            openScenarioMenu(firstCrumb);
-          } else {
-            // 新 board 没有场景了（例如切到纯图层文件），锁也没意义了
-            menuLocked = false;
-            closeScenarioMenu();
-          }
-        }
       }
 
       // 修改：场景下拉。场景是互斥的单选，选项固定为「基础 + 所有顶层场景」。
       // 只有第一段（场景名）会打开它，图层段没有下拉。
-      var menuLocked = false;
       var menuCloseTimer = null;
       function openScenarioMenu(anchor) {
         var menu = document.getElementById("scenarioMenu");
@@ -813,12 +773,9 @@
               }
             });
             btn.addEventListener("click", function () {
-              // 修改（2026-10-18）：选完场景后菜单保持打开并继续锁定，
-              // 只有再次点击第一段或按 Esc 才关闭。
-              // 这里不 closeScenarioMenu()，也不清 menuLocked；
-              // 新的 render 到达后 renderBreadcrumb 会重画面包屑，
-              // 并在末尾按 menuLocked 重新挂回菜单（见 syncMenuToCrumb）。
-              menuLocked = true;
+              // 修改（2026-10-18 简化）：选完就关。纯悬停模型下没有锁定状态，
+              // 关掉后鼠标离开菜单自然不会再弹。
+              closeScenarioMenu();
               vscode.postMessage({ command: "selectBoard", board: item.path });
             });
             menu.appendChild(btn);
@@ -832,7 +789,6 @@
 
       // 修改：延迟关闭 200ms——鼠标从面包屑移向菜单的途中不闪
       function scheduleCloseMenu() {
-        if (menuLocked) return;
         if (menuCloseTimer) clearTimeout(menuCloseTimer);
         menuCloseTimer = setTimeout(function () {
           menuCloseTimer = null;
@@ -971,14 +927,6 @@
         });
       }
 
-      // 修改（2026-10-18）：点空白处不再关闭下拉（用户要求）；
-      // 只保留 Esc 作为逃生口。
-      document.addEventListener("keydown", function (event) {
-        if (event.key === "Escape") {
-          menuLocked = false;
-          closeScenarioMenu();
-        }
-      });
 
       // 修改：三击（或划选到行尾）后粘贴会多出一个换行。原因：d2 的文字节点
       // 里没有行尾空白，选区终点只能落在元素边界上，浏览器序列化时会补一个
