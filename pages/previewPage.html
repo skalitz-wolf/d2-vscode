@@ -13,17 +13,17 @@
         top: 0px;
         background-color: var(--vscode-sideBar-background);
         padding-left: 15px;
-        /* 修改：返回按钮已删除（回顶层由面包屑的「基础」段承担），
+        /* 修改：返回按钮已删除（回根靠场景下拉里的「基础」项），
            右侧不再需要预留槽位 */
         padding-right: 15px;
         padding-bottom: 5px;
         width: 100%;
         /* 修改：必须 border-box。默认 content-box 下 width:100% 只算内容宽，
            加上左右 padding 后工具栏实际比视口宽并向右溢出，
-           绝对定位在其右缘（right:10px）的"返回主板"按钮会被整个推出屏幕外 */
+           任何绝对定位在右缘的控件都会被整个推出屏幕外 */
         box-sizing: border-box;
         color: var(--vscode-sideBar-forground);
-        /* 修改：单行不换行。场景栏自己负责横向滚动，工具栏高度恒为一行，
+        /* 修改：单行不换行。面包屑自己负责折叠，工具栏高度恒为一行，
            下方预览区的位置就不会随场景数量变化而跳动 */
         display: flex;
         align-items: center;
@@ -581,7 +581,7 @@
       //   - 后面是图层链；图层段没有下拉
       //   - 没有场景时第一段是「基础」，且不显示下拉
       //
-      // 悬停第一段立即弹菜单；移开 200ms 关闭；点击锁定/解锁。
+      // 悬停第一段立即弹菜单；移开 200ms 关闭（纯悬停模型，没有点击锁定）。
       function renderBreadcrumb(scenarios, board) {
         var bar = document.getElementById("boardBar");
         if (!bar) return;
@@ -605,22 +605,24 @@
 
         // 第一段：当前场景名。没有场景段时就是 root board，名字叫「基础」
         var scenarioName = scenarioSeg ? scenarioSeg.name : "基础";
-        var scenarioPath = scenarioSeg ? scenarioSeg.path : "";
         // 当前 board 恰好就是场景本身（还没进图层）时，这一段是"你在这里"
         var scenarioIsCurrent = !layers.length;
 
-        var paint = function () {
+        // 修改（2026-10-18 合并）：原来 paint / paintCollapsed 是两份几乎相同的
+        // 渲染逻辑，改一处容易漏另一处。合并成 paint(collapseFrom, collapseTo)：
+        // 传入折叠区间 [from, to) 时把中间图层换成「…」，否则完整渲染。
+        var paint = function (collapseFrom, collapseTo) {
+          var collapsed = typeof collapseFrom === "number" && collapseFrom >= 0;
           bar.innerHTML = "";
+
+          // 第一段：场景名（有场景时悬停弹下拉；无场景且不在根时可点回根）
           var first = document.createElement("button");
-          first.className = "crumb" + (scenarioIsCurrent ? " current" : "") +
-            (hasScenarios ? " has-menu" : "");
+          first.className = "crumb" + (scenarioIsCurrent ? " current" : "");
           first.innerText = scenarioName;
           first.title = hasScenarios ? "切换场景" : "回到主板";
           first.setAttribute("data-scenario-crumb", "1");
           if (hasScenarios) {
-            // 修改（2026-10-18 简化）：只保留悬停。移入弹、移出延迟关；
-            // 不再有"点击锁定"——那套状态机在"第一段可能没有下拉"时
-            // 语义不自洽，用户也嫌麻烦。
+            // 纯悬停模型：移入弹、移出延迟关；没有点击锁定状态
             first.addEventListener("mouseenter", function (event) {
               openScenarioMenu(event.currentTarget);
             });
@@ -634,8 +636,25 @@
           }
           bar.appendChild(first);
 
-          // 图层链：只有当前 board 的最后一段是"你在这里"，其余可点回退
+          // 图层链：最后一段是"你在这里"，其余可点回退
           for (var k = 0; k < layers.length; k++) {
+            if (collapsed && k === collapseFrom) {
+              // 折叠区间：画一个「…」，点它展开完整路径
+              var sepBefore = document.createElement("span");
+              sepBefore.className = "sep";
+              sepBefore.innerText = "›";
+              bar.appendChild(sepBefore);
+              var more = document.createElement("button");
+              more.className = "ellipsis";
+              more.innerText = "…";
+              more.title = "展开中间的 " + (collapseTo - collapseFrom) + " 个图层";
+              more.addEventListener("click", function () {
+                paint(-1, -1);
+              });
+              bar.appendChild(more);
+              k = collapseTo - 1;
+              continue;
+            }
             var sep = document.createElement("span");
             sep.className = "sep";
             sep.innerText = "›";
@@ -657,9 +676,8 @@
           }
         };
 
-        paint();
-
-        // 宽度不够时折叠中间图层段（保留第一段与最后一段）
+        // 先完整画一次；放不下就逐步折叠中间图层（保留第一段和最后一段）。
+        // 用实际渲染宽度判断，而不是 scrollWidth——折叠后会重画。
         var fits = function () {
           var barRect = bar.getBoundingClientRect();
           var kids = bar.children;
@@ -667,68 +685,23 @@
           var last = kids[kids.length - 1].getBoundingClientRect();
           return last.right <= barRect.right + 0.5;
         };
-        if (!fits() && layers.length > 2) {
-          // 折掉中间图层：只保留第一段、第一个和最后一个图层
-          var keep = [layers[0], layers[layers.length - 1]];
-          var collapsed = true;
-          var paintCollapsed = function () {
-            bar.innerHTML = "";
-            var first = document.createElement("button");
-            first.className = "crumb" + (scenarioIsCurrent ? " current" : "") +
-              (hasScenarios ? " has-menu" : "");
-            first.innerText = scenarioName;
-            first.title = hasScenarios ? "切换场景" : "回到主板";
-            first.setAttribute("data-scenario-crumb", "1");
-            if (hasScenarios) {
-              first.addEventListener("mouseenter", function (event) {
-                openScenarioMenu(event.currentTarget);
-              });
-              first.addEventListener("mouseleave", function () {
-                scheduleCloseMenu();
-              });
-            } else if (!scenarioIsCurrent) {
-              first.addEventListener("click", function () {
-                vscode.postMessage({ command: "selectBoard", board: "" });
-              });
-            }
-            bar.appendChild(first);
-            for (var k = 0; k < keep.length; k++) {
-              var sep = document.createElement("span");
-              sep.className = "sep";
-              sep.innerText = "›";
-              bar.appendChild(sep);
-              if (k === 1) {
-                var more = document.createElement("button");
-                more.className = "ellipsis";
-                more.innerText = "…";
-                more.title = "展开中间的图层";
-                more.addEventListener("click", function () {
-                  collapsed = false;
-                  paint();
-                });
-                bar.appendChild(more);
-                var sep2 = document.createElement("span");
-                sep2.className = "sep";
-                sep2.innerText = "›";
-                bar.appendChild(sep2);
-              }
-              var seg = keep[k];
-              var isLast = k === keep.length - 1;
-              var lb = document.createElement("button");
-              lb.className = "crumb" + (isLast ? " current" : "");
-              lb.innerText = seg.name;
-              lb.title = "图层：" + seg.name;
-              if (!isLast) {
-                (function (targetPath) {
-                  lb.addEventListener("click", function () {
-                    vscode.postMessage({ command: "selectBoard", board: targetPath });
-                  });
-                })(seg.path);
-              }
-              bar.appendChild(lb);
-            }
-          };
-          paintCollapsed();
+        paint(-1, -1);
+        // 修改：至少要有两个图层才值得折叠（1 个图层没有"中间"可折）
+        if (!fits() && layers.length >= 2) {
+          for (var collapseTo = 1; collapseTo < layers.length; collapseTo++) {
+            paint(0, collapseTo);
+            if (fits()) break;
+          }
+        }
+        // 修改：极端窄屏（工具栏按钮自己就占满一行）时，折叠到极限仍放不下。
+        // 这时只保留当前段，避免被 overflow:hidden 裁掉半个字。
+        if (!fits() && layers.length > 0) {
+          bar.innerHTML = "";
+          var only = document.createElement("button");
+          only.className = "crumb current";
+          only.innerText = layers[layers.length - 1].name;
+          only.title = "图层：" + only.innerText;
+          bar.appendChild(only);
         }
         syncToolbarHeight();
       }
@@ -743,6 +716,7 @@
           clearTimeout(menuCloseTimer);
           menuCloseTimer = null;
         }
+        bindMenuLeaveOnce();
         menu.innerHTML = "";
         var items = [{ name: "基础", path: "" }];
         var list = lastScenarios || [];
@@ -765,13 +739,6 @@
             btn.className = "menuItem" + (item.path === currentScenarioPath ? " active" : "");
             btn.innerText = item.name;
             btn.title = item.name;
-            btn.addEventListener("mouseenter", function () {
-              // 鼠标进入菜单后取消关闭计时，允许移过去点
-              if (menuCloseTimer) {
-                clearTimeout(menuCloseTimer);
-                menuCloseTimer = null;
-              }
-            });
             btn.addEventListener("click", function () {
               // 修改（2026-10-18 简化）：选完就关。纯悬停模型下没有锁定状态，
               // 关掉后鼠标离开菜单自然不会再弹。
@@ -785,6 +752,24 @@
         menu.style.left = Math.round(r.left) + "px";
         menu.style.top = Math.round(r.bottom + 4) + "px";
         menu.classList.add("open");
+      }
+
+      // 修改：菜单容器的离开事件只绑一次（放在 init 里绑会拿不到元素顺序，
+      // 这里用惰性绑定）。之前只给每个 .menuItem 绑了 mouseenter，
+      // 结果鼠标从菜单移出去时没有任何人安排关闭，菜单会永久停留。
+      function bindMenuLeaveOnce() {
+        var menu = document.getElementById("scenarioMenu");
+        if (!menu || menu.dataset.leaveBound === "1") return;
+        menu.dataset.leaveBound = "1";
+        menu.addEventListener("mouseenter", function () {
+          if (menuCloseTimer) {
+            clearTimeout(menuCloseTimer);
+            menuCloseTimer = null;
+          }
+        });
+        menu.addEventListener("mouseleave", function () {
+          scheduleCloseMenu();
+        });
       }
 
       // 修改：延迟关闭 200ms——鼠标从面包屑移向菜单的途中不闪
@@ -804,10 +789,13 @@
           menuCloseTimer = null;
         }
       }
-      // 修改：与 boardParser.escapeBoardSegment 同一规则——名字含 "." 时加引号，
-      // 否则 d2 会把点当路径分隔符（实测报 render target not found）
+      // 修改：把 board 名字拼进 --target 时，某些字符必须加引号。
+      // 实测（d2 v0.9.0）："." 会被当成路径分隔符；":" 和 "#" 裸写会直接报错。
+      // 所以只要名字含这些字符（或首尾有空格），就整体加引号并转义内部引号。
+      // 注意：这不是"只在含点时才需要"——评审时实测 带:冒号 / 带#井号 裸写都失败。
       function escapeSegment(name) {
-        if (name.indexOf(".") < 0) return name;
+        var needsQuote = /[.:#{}"]/.test(name) || name !== name.trim();
+        if (!needsQuote) return name;
         return '"' + name.replace(/"/g, '\\"') + '"';
       }
 
@@ -1121,7 +1109,7 @@
           />
         </svg>
       </button>
-      <!-- 修改：场景切换栏（默认空，有场景时由 JS 填充"场景：基础 xxx yyy"） -->
+      <!-- 修改：面包屑（默认空，有场景/图层时由 JS 填充，如「缓存命中 › 存储细节」） -->
       <span id="boardBar"></span>
     </div>
     <!-- 修改（2026-10-18）：场景下拉，点面包屑里的场景段时弹出 -->

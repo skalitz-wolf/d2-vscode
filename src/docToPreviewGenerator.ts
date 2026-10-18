@@ -94,8 +94,8 @@ export class DocToPreviewGenerator {
       [...this.mapOfConnection.entries()].sort(
         (a: [TextDocument, D2P], b: [TextDocument, D2P]): number => {
           return b[1].fileDateTime - a[1].fileDateTime;
-        }
-      )
+        },
+      ),
     );
 
     // Regenerate the browser view for all open d2 documents, since
@@ -146,7 +146,7 @@ export class DocToPreviewGenerator {
     // 若当前 trkObj.outputDoc 已存在，说明用户已经打开过预览，本次是 Recompile，
     // 应保留用户的缩放比例和 pan 位置；否则是初次预览，走 fit 流程。
     // 图层跳转（boardChanged）视为新图，重新 fit 而不是沿用旧图的缩放位置
-    const preserveZoom = !!trkObj.outputDoc && !boardChanged;
+    const preserveZoom = Boolean(trkObj.outputDoc) && !boardChanged;
     // If we don't have a preview window already, create one
     if (!trkObj.outputDoc && openPreview) {
       trkObj.outputDoc = new BrowserWindow(trkObj);
@@ -159,30 +159,35 @@ export class DocToPreviewGenerator {
 
     // board 作为第 4 参传给 genTask → compile 的 --target，
     // 决定本次渲染主板还是 layers/scenarios 的某个子 board
-    taskRunner.genTask(trkObj.inputDoc?.fileName, fileText, (data, error) => {
-      const p = path.parse(trkObj.inputDoc?.fileName || "");
+    taskRunner.genTask(
+      trkObj.inputDoc?.fileName,
+      fileText,
+      (data, error) => {
+        const p = path.parse(trkObj.inputDoc?.fileName || "");
 
-      if (data.length > 0) {
-        // 修改：把 preserveZoom 透传给 setSvg，让 webview 决定是 fit 还是保留当前位置；
-        // board 一并传给 webview，用于显示"返回主板"按钮
-        trkObj.outputDoc?.setSvg(data, preserveZoom, board);
-        outputChannel.appendInfo(`Preview for ${p.base} updated.`);
-        trkObj.outputDoc?.hideToast();
-      } else if (error.length > 0) {
-        outputChannel.appendInfo(`Preview for ${p.base} has errors.`);
-        const arr: string[] = error.split("\n");
+        if (data.length > 0) {
+          // 修改：把 preserveZoom 透传给 setSvg，让 webview 决定是 fit 还是保留当前位置；
+          // board 一并传给 webview，用于渲染面包屑
+          trkObj.outputDoc?.setSvg(data, preserveZoom, board);
+          outputChannel.appendInfo(`Preview for ${p.base} updated.`);
+          trkObj.outputDoc?.hideToast();
+        } else if (error.length > 0) {
+          outputChannel.appendInfo(`Preview for ${p.base} has errors.`);
+          const arr: string[] = error.split("\n");
 
-        let list = "";
-        arr.forEach((s) => {
-          list += `<li>${s}</li>`;
-        });
+          let list = "";
+          arr.forEach((s) => {
+            list += `<li>${s}</li>`;
+          });
 
-        trkObj.outputDoc?.setToastMsg("Errors");
-        trkObj.outputDoc?.setToastList(list);
-        trkObj.outputDoc?.showToast();
-      }
+          trkObj.outputDoc?.setToastMsg("Errors");
+          trkObj.outputDoc?.setToastList(list);
+          trkObj.outputDoc?.showToast();
+        }
 
-      trkObj.outputDoc?.hideBusy();
-    }, board);
+        trkObj.outputDoc?.hideBusy();
+      },
+      board,
+    );
   }
 }

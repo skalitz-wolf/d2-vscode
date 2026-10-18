@@ -59,7 +59,7 @@ export function activate(context: ExtensionContext): VSCAny {
           previewGenerator.generate(activeEditor.document);
         }
       }
-    })
+    }),
   );
 
   context.subscriptions.push(
@@ -72,7 +72,7 @@ export function activate(context: ExtensionContext): VSCAny {
           trk?.timer?.reset();
         }
       }
-    })
+    }),
   );
 
   // User actually forced a save, NOT auto save
@@ -83,7 +83,7 @@ export function activate(context: ExtensionContext): VSCAny {
       if (e.document.languageId === d2Ext) {
         hardSave = e.reason === TextDocumentSaveReason.Manual;
       }
-    })
+    }),
   );
 
   context.subscriptions.push(
@@ -100,7 +100,7 @@ export function activate(context: ExtensionContext): VSCAny {
 
         hardSave = false;
       }
-    })
+    }),
   );
 
   context.subscriptions.push(
@@ -108,7 +108,7 @@ export function activate(context: ExtensionContext): VSCAny {
       if (doc.languageId === d2Ext) {
         previewGenerator.createObjectToTrack(doc);
       }
-    })
+    }),
   );
 
   context.subscriptions.push(
@@ -116,7 +116,7 @@ export function activate(context: ExtensionContext): VSCAny {
       if (doc.languageId === d2Ext) {
         previewGenerator.deleteObjectToTrack(doc);
       }
-    })
+    }),
   );
 
   context.subscriptions.push(
@@ -129,7 +129,7 @@ export function activate(context: ExtensionContext): VSCAny {
         const trk = previewGenerator.getTrackObject(activeEditor.document);
         trk?.outputDoc?.show();
       }
-    })
+    }),
   );
 
   context.subscriptions.push(
@@ -160,7 +160,7 @@ export function activate(context: ExtensionContext): VSCAny {
           });
         });
       });
-    })
+    }),
   );
 
   context.subscriptions.push(
@@ -179,11 +179,7 @@ export function activate(context: ExtensionContext): VSCAny {
         // 输出路径以 .svg 结尾：多板文件 d2 会建同名目录（图层示例.d2 → 图层示例/），
         // 单板文件则直接生成单个 SVG 文件
         const outFile = filePath.substr(0, filePath.lastIndexOf(".")) + ".svg";
-        const ok = d2Tasks.compileToSvgs(
-          doc.getText(),
-          path.dirname(filePath),
-          outFile
-        );
+        const ok = d2Tasks.compileToSvgs(doc.getText(), path.dirname(filePath), outFile);
         if (!ok) {
           const msg = `Unable to convert ${filePath} to ${outFile}`;
           outputChannel.appendError(msg);
@@ -193,7 +189,7 @@ export function activate(context: ExtensionContext): VSCAny {
         }
         outputChannel.appendInfo(`File ${filePath} converted to ${outFile}`);
       });
-    })
+    }),
   );
 
   // 导出为 PNG / PDF / PPTX / GIF 等二进制格式（d2 CLI 原生支持 --stdout-format）。
@@ -211,11 +207,7 @@ export function activate(context: ExtensionContext): VSCAny {
     }
 
     workspace.openTextDocument(filePath).then((doc) => {
-      const data = d2Tasks.compileBinary(
-        doc.getText(),
-        path.dirname(filePath),
-        format
-      );
+      const data = d2Tasks.compileBinary(doc.getText(), path.dirname(filePath), format);
       if (!data || data.length === 0) {
         const msg = `Unable to convert ${filePath} to ${format}`;
         outputChannel.appendError(msg);
@@ -239,9 +231,7 @@ export function activate(context: ExtensionContext): VSCAny {
   ];
   for (const [commandId, format] of imageFormats) {
     context.subscriptions.push(
-      commands.registerCommand(commandId, (fileInfo) =>
-        compileToImage(format, fileInfo)
-      )
+      commands.registerCommand(commandId, (fileInfo) => compileToImage(format, fileInfo)),
     );
   }
 
@@ -250,7 +240,7 @@ export function activate(context: ExtensionContext): VSCAny {
     {
       provideDocumentFormattingEdits(document: TextDocument): TextEdit[] {
         const documentEditor = window.visibleTextEditors.find(
-          (editor) => editor.document === document
+          (editor) => editor.document === document,
         );
 
         if (documentEditor) {
@@ -259,7 +249,7 @@ export function activate(context: ExtensionContext): VSCAny {
 
         return [];
       },
-    }
+    },
   );
 
   context.subscriptions.push(
@@ -274,7 +264,7 @@ export function activate(context: ExtensionContext): VSCAny {
           }
         });
       }
-    })
+    }),
   );
 
   context.subscriptions.push(
@@ -289,7 +279,7 @@ export function activate(context: ExtensionContext): VSCAny {
           }
         });
       }
-    })
+    }),
   );
 
   context.subscriptions.push(
@@ -300,7 +290,7 @@ export function activate(context: ExtensionContext): VSCAny {
         const current: boolean = ws.get("previewSketch", false);
         ws.update("previewSketch", !current, true);
       }
-    })
+    }),
   );
 
   /** Find all open d2 files and add to tracker if they are
@@ -344,7 +334,7 @@ export function extendMarkdownItWithD2(md: VSCAny): unknown {
   md.options.highlight = (code: string, lang: string) => {
     if (lang === d2Lang) {
       const activeEditor = path.parse(
-        window.activeTextEditor?.document.fileName ?? ""
+        window.activeTextEditor?.document.fileName ?? "",
       ).dir;
 
       return d2Tasks.compile(code, activeEditor, (msg) => {

@@ -20,7 +20,7 @@ class D2Tasks {
     terminal?: TaskOutput,
     // 要渲染的 board 路径（如 "layers.Sggate 内部"）；空串 = 主板。
     // 由预览的图层跳转传入，默认主板
-    target: string = ""
+    target: string = "",
   ): string {
     const layout: string = ws.get("previewLayout", "dagre");
     const theme: string = ws.get("previewTheme", "default");
@@ -35,8 +35,8 @@ class D2Tasks {
     const fileThemeMatch = text.match(/theme-id\s*:\s*(\d+)/);
     const fileLayout = fileLayoutMatch ? fileLayoutMatch[1] : undefined;
     const fileTheme = fileThemeMatch ? fileThemeMatch[1] : undefined;
-    const hasFileLayout = !!fileLayout;
-    const hasFileTheme = !!fileTheme;
+    const hasFileLayout = Boolean(fileLayout);
+    const hasFileTheme = Boolean(fileTheme);
     const effectiveLayout = hasFileLayout ? fileLayout : layout;
     const effectiveTheme = hasFileTheme ? `file(${fileTheme})` : theme;
 
@@ -46,7 +46,7 @@ class D2Tasks {
         `${hasFileLayout ? ` (from file, overrides setting "${layout}")` : ""}` +
         `  Theme: ${VT.Yellow}${effectiveTheme}${VT.Reset}` +
         `${hasFileTheme ? ` (from file, overrides setting "${theme}")` : ""}` +
-        `  Sketch: ${VT.Yellow}${sketch}${VT.Reset}`
+        `  Sketch: ${VT.Yellow}${sketch}${VT.Reset}`,
     );
     terminal?.(`Current Working Directory: ${VT.Yellow}${filePath}${VT.Reset}`);
     terminal?.("");
@@ -123,7 +123,11 @@ class D2Tasks {
    * @param format 目标格式：png / pdf / pptx / gif
    * @returns 编译成功的二进制 Buffer；失败返回 null
    */
-  public compileBinary(text: string, cwd: string | undefined, format: string): Buffer | null {
+  public compileBinary(
+    text: string,
+    cwd: string | undefined,
+    format: string,
+  ): Buffer | null {
     const layout: string = ws.get("previewLayout", "dagre");
     const theme: string = ws.get("previewTheme", "default");
     const sketch: boolean = ws.get("previewSketch", false);
@@ -140,7 +144,7 @@ class D2Tasks {
     // 传 sketch 是因为 sketch 下不能塞隐式默认字体（原因见 resolveExportFont 注释）
     const exportFont = this.resolveExportFont(
       ws.get<string>("exportFontPath", ""),
-      sketch
+      sketch,
     );
 
     const args: string[] = [
@@ -183,7 +187,9 @@ class D2Tasks {
     }
 
     if (proc.status !== 0) {
-      outputChannel.appendError(proc.stderr?.toString() ?? `Failed to convert to ${format}`);
+      outputChannel.appendError(
+        proc.stderr?.toString() ?? `Failed to convert to ${format}`,
+      );
       return null;
     }
 
@@ -239,7 +245,7 @@ class D2Tasks {
 
     if (proc.status !== 0) {
       outputChannel.appendError(
-        proc.stderr?.toString() ?? `Failed to compile to ${outFile}`
+        proc.stderr?.toString() ?? `Failed to compile to ${outFile}`,
       );
       return false;
     }
@@ -266,7 +272,7 @@ class D2Tasks {
    */
   private resolveExportFont(
     configured: string,
-    sketch: boolean = false
+    sketch: boolean = false,
   ): string | undefined {
     const trimmed = (configured ?? "").trim();
     if (trimmed) {
@@ -279,7 +285,7 @@ class D2Tasks {
     const candidate = path.join(
       process.env.SystemRoot ?? "C:\\Windows",
       "Fonts",
-      "simhei.ttf"
+      "simhei.ttf",
     );
     return os.platform() === "win32" && existsSync(candidate) ? candidate : undefined;
   }
@@ -311,9 +317,9 @@ class D2Tasks {
       builder.replace(
         new Range(
           textEditor.document.lineAt(0).range.start,
-          textEditor.document.lineAt(textEditor.document.lineCount - 1).range.end
+          textEditor.document.lineAt(textEditor.document.lineCount - 1).range.end,
         ),
-        data
+        data,
       );
     });
 

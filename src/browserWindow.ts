@@ -17,7 +17,7 @@ export class BrowserWindow {
   // 修改：缓存最近一次渲染的 SVG，用于 webview 上下文重置后
   // （例如面板被 Move to New Window、隐藏后再次显示）能重新推送恢复画面
   lastSvg: string;
-  // 最近渲染的 board 路径（空串 = 主板），与 lastSvg 配合用于上下文重置后恢复返回按钮状态
+  // 最近渲染的 board 路径（空串 = 主板），与 lastSvg 配合用于上下文重置后恢复面包屑
   lastBoard: string;
   // 最近一次的场景名列表，用于上下文重置后恢复面包屑里的场景下拉
   lastScenarios: string[];
@@ -47,7 +47,7 @@ export class BrowserWindow {
         enableScripts: true,
         retainContextWhenHidden: true,
         localResourceRoots: [Uri.file(path.join(extContext.extensionPath, "pages"))],
-      }
+      },
     );
     this.webView = this.webViewPanel.webview;
 
@@ -67,10 +67,6 @@ export class BrowserWindow {
     // webview 的 JS 上下文会被重置、HTML 回到初始 Loading... 状态），
     // 重发最近一次 SVG 并显式清掉 toast / busy，让画面恢复显示
     this.webViewPanel.onDidChangeViewState((e) => {
-      // When the panel becomes visible again (including after being
-      // moved to a new VSCode window), the webview's JavaScript
-      // context may have been reset, so re-send the last rendered
-      // SVG and clear stale toast/busy state.
       if (e.webviewPanel.visible && this.lastSvg.length > 0) {
         // 上下文重置后 webview 的缩放状态已丢失，不传 preserveZoom，走 fit 恢复
         this.webView.postMessage({
@@ -135,7 +131,7 @@ export class BrowserWindow {
                 } else {
                   util.openWithDefaultApp(filepath);
                 }
-              }
+              },
             );
             break;
           }
@@ -154,7 +150,7 @@ export class BrowserWindow {
         }
       },
       this,
-      extContext.subscriptions
+      extContext.subscriptions,
     );
   }
 

@@ -51,25 +51,11 @@ export function parseTopLevelBoards(text: string, keyword: string): string[] {
   return names;
 }
 
-/**
- * 把一个 board 名字拼进 --target 路径。
- *
- * 名字里含 "." 时必须加引号：d2 把 "." 当路径分隔符，裸拼 scenarios.A.B 会
- * 被解析成 scenarios 下的 A 再下钻 B，实测报 render target not found；
- * scenarios."A.B" 才是单层名字（2026-10-18 实测 v0.9.0）。
- *
- * 名字本身带引号时用反斜杠转义引号，避免破坏 d2 的字符串字面量。
- */
-export function escapeBoardSegment(name: string): string {
-  if (name.indexOf(".") < 0) {
-    return name;
-  }
-  return '"' + name.replace(/"/g, '\\"') + '"';
-}
-
 /** 定位深度 0 的 "keyword: {"，返回 '{' 之后的位置；找不到返回 -1 */
 function findTopLevelBlock(text: string, keyword: string): number {
-  const isWord = (ch: string | undefined): boolean => !!ch && /[A-Za-z0-9_]/.test(ch);
+  // Boolean() 不会像 !! 那样把 ch 收窄成 string，所以显式判断 undefined
+  const isWord = (ch: string | undefined): boolean =>
+    ch !== undefined && /[A-Za-z0-9_]/.test(ch);
   let depth = 0;
   let i = 0;
   while (i < text.length) {
@@ -101,7 +87,12 @@ function findTopLevelBlock(text: string, keyword: string): number {
       continue;
     }
     // 前后都不能是单词字符，避免匹配到 myscenarios 之类的子串
-    if (depth === 0 && text.startsWith(keyword, i) && !isWord(text[i - 1]) && !isWord(text[i + keyword.length])) {
+    if (
+      depth === 0 &&
+      text.startsWith(keyword, i) &&
+      !isWord(text[i - 1]) &&
+      !isWord(text[i + keyword.length])
+    ) {
       let j = i + keyword.length;
       while (j < text.length && (text[j] === " " || text[j] === "\t")) {
         j++;
@@ -124,15 +115,8 @@ function findTopLevelBlock(text: string, keyword: string): number {
 /**
  * 读一个一级键：支持裸串（读到 ':' 为止，可含空格/中文）与双引号串。
  * 返回键名与 ':' 之后的位置；不是键（先遇到换行或结构字符）返回 null。
- *
- * `quoted` 记录原写法是否带引号。名字里含 "." 时 d2 会把它当路径分隔符，
- * 拼 --target 必须写成 scenarios."A.B"（裸拼 scenarios.A.B 会被当成两层，
- * 实测报 render target not found），所以这个信息不能丢。
  */
-function readKey(
-  text: string,
-  start: number
-): { name: string; next: number; quoted: boolean } | null {
+function readKey(text: string, start: number): { name: string; next: number } | null {
   if (text[start] === '"') {
     const end = skipQuoted(text, start);
     if (end < 0) {
@@ -142,14 +126,14 @@ function readKey(
     if (text[j] !== ":") {
       return null;
     }
-    return { name: text.slice(start + 1, end - 1), next: j + 1, quoted: true };
+    return { name: text.slice(start + 1, end - 1), next: j + 1 };
   }
   let i = start;
   while (i < text.length) {
     const c = text[i];
     if (c === ":") {
       const name = text.slice(start, i).trim();
-      return name ? { name, next: i + 1, quoted: false } : null;
+      return name ? { name, next: i + 1 } : null;
     }
     // 裸键是单行的，遇到换行或结构字符说明这不是键
     if (c === "\n" || c === "{" || c === "}" || c === '"') {

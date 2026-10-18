@@ -30,14 +30,14 @@ export class TaskRunner {
     text: string,
     callback: TaskRunnerCallback,
     // 要渲染的 board 路径，空串 = 主板（透传给 d2Tasks.compile）
-    target: string = ""
+    target: string = "",
   ): void {
     const pty = new CustomTaskTerminal(filename, text, callback, target);
     const ce = new CustomExecution(
       (): Promise<CustomTaskTerminal> =>
         new Promise((resolve) => {
           resolve(pty);
-        })
+        }),
     );
 
     const task = new Task(
@@ -46,7 +46,7 @@ export class TaskRunner {
       d2TaskName,
       "D2 Extension",
       ce,
-      ["$D2Matcher"]
+      ["$D2Matcher"],
     );
 
     task.presentationOptions = {
@@ -85,7 +85,7 @@ class CustomTaskTerminal implements Pseudoterminal {
     filename: string,
     text: string,
     callback: TaskRunnerCallback,
-    target: string = ""
+    target: string = "",
   ) {
     this.fileName = path.parse(filename).base;
     this.fileDirectory = path.parse(filename).dir;
@@ -109,7 +109,7 @@ class CustomTaskTerminal implements Pseudoterminal {
           this.writeLine(err);
         }
       },
-      this.target
+      this.target,
     );
 
     this.callback(data, this.compileErrors);
