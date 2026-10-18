@@ -13,9 +13,9 @@
         top: 0px;
         background-color: var(--vscode-sideBar-background);
         padding-left: 15px;
-        /* 修改：右侧只留返回按钮的槽位。原先 200px 是给绝对定位的返回按钮预留的，
-           但按钮本身只有 25px，多出的 175px 白白吃掉了场景栏的宽度 */
-        padding-right: 45px;
+        /* 修改：返回按钮已删除（回顶层由面包屑的「基础」段承担），
+           右侧不再需要预留槽位 */
+        padding-right: 15px;
         padding-bottom: 5px;
         width: 100%;
         /* 修改：必须 border-box。默认 content-box 下 width:100% 只算内容宽，
@@ -155,14 +155,12 @@
         padding-left: 10px;
       }
 
-      /* 修改：board 跳转的"返回主板"按钮。固定在 toolbar 右端，
-         toolbar 的 padding-right: 45px 正好是它的槽位；只在非主板 board 时显示 */
-      /* 修改：左上角场景切换栏。场景（scenarios）是整张图的变体、不属于任何
-         节点（与图层不同），因此不走节点 .link 角标，而是工具栏里这一行
-         可点击的场景名直接切换 board；"基础"固定为第一项（主板） */
-      /* 修改：场景栏占满按钮行剩余宽度，窄面板时横向滚动而不是换行。
-         工具栏是 flex 单行，所以高度恒为一行；这里必须 min-width:0，
-         否则 flex 子项的默认 min-width:auto 会撑破容器、把滚动变成溢出 */
+      /* 修改（2026-10-18）：场景栏换成面包屑。
+         layer 与 scenario 不是互斥的两套东西，而是同一条 board 路径上的两种段
+         （scenarios.A.layers.B 合法），所以用一条路径表达它们：
+           基础 › 场景A › 图层B
+         「基础」是 root board，点它即回顶层；中间段点哪段回哪层。
+         工具栏是 flex 单行，面包屑占满剩余宽度。 */
       #boardBar {
         flex: 1 1 auto;
         min-width: 0;
@@ -170,56 +168,95 @@
         display: flex;
         align-items: center;
         flex-wrap: nowrap;
-        overflow-x: auto;
-        overflow-y: hidden;
+        overflow: hidden;
         white-space: nowrap;
-      }
-
-      /* 修改：只在真的溢出时显示细滚动条，避免常年挂一条横条 */
-      #boardBar.is-scrollable {
-        padding-bottom: 2px;
-      }
-
-      #boardBar::-webkit-scrollbar {
-        height: 4px;
-      }
-
-      #boardBar::-webkit-scrollbar-thumb {
-        border-radius: 2px;
-        background: var(--vscode-scrollbarSlider-background);
-      }
-
-      /* 未激活的场景项做成链接样式（textLink 色在深浅主题下都可读），
-         激活项用按钮底色填充标识当前 board */
-      #boardBar .boardChip {
-        flex: 0 0 auto;
-        margin-top: 1px;
-        margin-left: 2px;
-        padding: 2px 8px;
         font-size: 12px;
-        color: var(--vscode-textLink-foreground);
-        background-color: transparent;
+      }
+
+      /* 面包屑的一段：可点的用链接色，当前段加粗且不可点 */
+      #boardBar .crumb {
+        flex: 0 0 auto;
+        padding: 2px 6px;
         border: 0px;
+        background-color: transparent;
+        color: var(--vscode-textLink-foreground);
+        font-size: 12px;
         cursor: pointer;
-        /* 修改：场景名过长时截断，完整名字靠 title 悬停查看——
-           横向滚动条又细又容易误触，截断比滚动更好用 */
-        max-width: 12em;
+        max-width: 14em;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
       }
 
-      #boardBar .boardChip.active {
-        color: var(--vscode-button-foreground);
-        background-color: var(--vscode-button-background);
-        font-weight: 600;
+      #boardBar .crumb:hover {
+        text-decoration: underline;
       }
 
-      #backBtn {
-        position: absolute;
-        right: 10px;
-        top: 3px;
+      #boardBar .crumb.current {
+        color: var(--vscode-foreground);
+        font-weight: 600;
+        cursor: default;
+        text-decoration: none;
+      }
+
+      /* 段之间的分隔符，纯装饰，不可点 */
+      #boardBar .sep {
+        flex: 0 0 auto;
+        color: var(--vscode-descriptionForeground);
+        padding: 0 2px;
+      }
+
+      /* 超长时折叠出来的省略号段，点它展开全部 */
+      #boardBar .ellipsis {
+        flex: 0 0 auto;
+        padding: 2px 4px;
+        border: 0px;
+        background-color: transparent;
+        color: var(--vscode-descriptionForeground);
+        font-size: 12px;
+        cursor: pointer;
+      }
+
+      /* 场景下拉：点面包屑里的场景段时弹出，列出基础 + 所有场景 */
+      #scenarioMenu {
+        position: fixed;
+        z-index: 120;
+        min-width: 120px;
+        max-width: 320px;
+        max-height: 60vh;
+        overflow-y: auto;
+        padding: 4px 0;
+        background-color: var(--vscode-dropdown-background);
+        border: 1px solid var(--vscode-dropdown-border);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
         display: none;
+      }
+
+      #scenarioMenu.open {
+        display: block;
+      }
+
+      #scenarioMenu .menuItem {
+        display: block;
+        width: 100%;
+        padding: 5px 12px;
+        border: 0px;
+        background: transparent;
+        color: var(--vscode-dropdown-foreground);
+        font-size: 12px;
+        text-align: left;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        cursor: pointer;
+      }
+
+      #scenarioMenu .menuItem:hover {
+        background-color: var(--vscode-list-hoverBackground);
+      }
+
+      #scenarioMenu .menuItem.active {
+        font-weight: 600;
       }
 
       /* 修改：d2 的 .link 用 <a> 包住整个节点，但真正的"超链接图标"是渲染在
@@ -247,6 +284,11 @@
       var fitMode = true;
       // 修改：当前渲染的 board 路径（空串 = 主板）。board 变化时强制重新 fit
       var currentBoard = "";
+      // 修改：最近一次的场景名列表，供面包屑的场景下拉使用
+      var lastScenarios = [];
+      // 修改：最近一次渲染的 board 路径。resize 时要按新宽度重画面包屑
+      // （折叠/展开是依赖宽度的），所以不能只存 scenarios
+      var lastBoard = "";
       // 修改：拖动平移相关状态——记录画布相对原点的偏移量
       var panX = 0;
       var panY = 0;
@@ -324,6 +366,9 @@
         // 修改：面板拖动改宽/改高后，工具栏可能变高（滚动条出现）也可能变矮，
         // 需要重新量一次，否则图区会压在工具栏下面或留出多余空白
         window.addEventListener("resize", function () {
+          // 修改：面包屑的折叠取决于可用宽度，窗口变宽/变窄都要重画，
+          // 否则会出现"变窄后仍显示完整路径、被裁掉"或"变宽后还留着省略号"
+          renderBreadcrumb(lastScenarios, lastBoard);
           syncToolbarHeight();
         });
         // 修改：webview 上下文重置后（例如 move to new window），主动隐藏
@@ -481,55 +526,194 @@
         vscode.postMessage({ command: "refreshPage" });
       }
 
-      // 修改：board 跳转的后退——通知扩展端弹出历史栈顶并跳转过去（浏览器式逐层后退）
-      function navigateBack() {
-        vscode.postMessage({ command: "navigateBack" });
+
+      // 修改（2026-10-18）：把 board 路径切成面包屑的段。
+      // 路径形如 scenarios.A.layers.B.layers.C；按关键字切，紧随其后的名字是段名。
+      // 返回 [{name, path, kind}]，kind 为 "scenario" | "layer"。
+      // 名字里可能含 "."（d2 允许引号键），所以这里只按关键字切、不按点切。
+      function splitBoardPath(board) {
+        var segs = [];
+        var path = board || "";
+        var parts = path.split(".");
+        var i = 0;
+        // 修改：路径必须累积。d2 的嵌套图层路径是 layers.L1.layers.L2，
+        // 不是 layers.L2；每段都要带上前面所有段，否则点中间层会跳到错误位置。
+        // 同理 scenarios.S1.layers.L1 的图层段也必须带上前面的场景段。
+        var acc = "";
+        while (i < parts.length) {
+          var kw = parts[i];
+          if ((kw === "scenarios" || kw === "layers") && i + 1 < parts.length) {
+            var name = parts[i + 1];
+            var raw;
+            var next = i + 2;
+            // 还原被引号包裹的名字：scenarios."A.B" 在 split 后是 [scenarios, "A, B"]
+            if (name.charAt(0) === '"') {
+              var joined = name.slice(1);
+              var j = i + 2;
+              while (j < parts.length && joined.charAt(joined.length - 1) !== '"') {
+                joined += "." + parts[j];
+                j++;
+              }
+              if (joined.charAt(joined.length - 1) === '"') {
+                joined = joined.slice(0, -1);
+              }
+              name = joined;
+              raw = kw + "." + '"' + name + '"';
+              next = j;
+            } else {
+              raw = kw + "." + name;
+            }
+            acc = acc ? acc + "." + raw : raw;
+            segs.push({ name: name, path: acc, kind: kw === "scenarios" ? "scenario" : "layer" });
+            i = next;
+            continue;
+          }
+          i++;
+        }
+        return segs;
       }
 
-      // 修改：渲染左上角场景切换栏。scenarios 是扩展端解析源码得到的顶层场景名
-      // 列表；"基础"固定第一项（主板，board 路径为空串），场景名的 board 路径
-      // 为 "scenarios.名字"。board 是当前渲染的 board 路径，用于高亮当前项；
-      // 当前在图层（layers.*）时没有任何场景项高亮，属预期
-      // 修改：去掉「场景：」前缀。它固定占 48px，是场景栏里最大的一块开销，
-      // 而「基础」打头的 chips + 选中态已经足以说明这排是什么
-      function renderBoardBar(scenarios, board) {
+      // 修改：面包屑渲染。第一段固定「基础」（root board），其后是路径各段。
+      // 普通文件（无场景无图层）不渲染，避免只剩一个孤零零的「基础」。
+      // 修改：面包屑渲染。第一段固定「基础」（root board），其后是路径各段。
+      // 宽度不够时把中间段折叠成「…」（点它展开），保住头和尾——
+      // 横向滚动会把「基础」滚出视野，反而失去面包屑的意义。
+      function renderBreadcrumb(scenarios, board) {
         var bar = document.getElementById("boardBar");
         if (!bar) return;
         bar.innerHTML = "";
-        bar.classList.remove("is-scrollable");
-        if (!scenarios || scenarios.length === 0) {
+        var segs = splitBoardPath(board);
+        var hasScenarios = !!(scenarios && scenarios.length > 0);
+        var hasLayers = segs.some(function (x) { return x.kind === "layer"; });
+        // 普通文件：无场景、无图层，不显示面包屑
+        if (!hasScenarios && !hasLayers) {
           syncToolbarHeight();
           return;
         }
-        var activeChip = null;
-        var addItem = function (name, path) {
-          var b = document.createElement("button");
-          b.className = "boardChip" + (board === path ? " active" : "");
-          b.innerText = name;
-          // 修改：长场景名被 CSS 截断成省略号，完整名字靠 title 悬停查看
-          b.title = name;
-          // 场景名可能含空格/引号等字符，用 addEventListener 而非内联
-          // onclick 拼字符串，避免转义问题
-          b.addEventListener("click", function () {
-            vscode.postMessage({ command: "selectBoard", board: path });
+        var currentPath = board || "";
+
+        // 构建「段」描述：root + 各路径段。collapsed=true 时整段折叠为 …
+        var items = [{ name: "基础", path: "", kind: "root", current: currentPath === "" }];
+        for (var k = 0; k < segs.length; k++) {
+          items.push({
+            name: segs[k].name,
+            path: segs[k].path,
+            kind: segs[k].kind,
+            current: segs[k].path === currentPath,
           });
-          if (board === path) activeChip = b;
-          bar.appendChild(b);
+        }
+
+        var paint = function (collapsedFrom, collapsedTo) {
+          bar.innerHTML = "";
+          for (var i = 0; i < items.length; i++) {
+            if (i > 0) {
+              var sep = document.createElement("span");
+              sep.className = "sep";
+              sep.innerText = "›";
+              bar.appendChild(sep);
+            }
+            if (i === collapsedFrom) {
+              // 折叠段：点它恢复完整显示
+              var more = document.createElement("button");
+              more.className = "ellipsis";
+              more.innerText = "…";
+              more.title = "展开中间的 " + (collapsedTo - collapsedFrom) + " 段";
+              (function () {
+                more.addEventListener("click", function () {
+                  paint(-1, -1);
+                });
+              })();
+              bar.appendChild(more);
+              i = collapsedTo - 1;
+              continue;
+            }
+            var item = items[i];
+            var b = document.createElement("button");
+            b.className = "crumb" + (item.current ? " current" : "");
+            b.innerText = item.name;
+            b.title = item.kind === "scenario" ? "场景：" + item.name
+              : item.kind === "layer" ? "图层：" + item.name
+              : "回到主板";
+            if (!item.current) {
+              (function (it) {
+                if (it.kind === "scenario") {
+                  b.addEventListener("click", function (event) {
+                    openScenarioMenu(event.currentTarget);
+                  });
+                } else {
+                  b.addEventListener("click", function () {
+                    vscode.postMessage({ command: "selectBoard", board: it.path });
+                  });
+                }
+              })(item);
+            }
+            bar.appendChild(b);
+          }
         };
-        addItem("基础", "");
-        for (var i = 0; i < scenarios.length; i++) {
-          addItem(scenarios[i], "scenarios." + scenarios[i]);
-        }
-        // 修改：只在真的溢出时才标记可滚动（CSS 据此给细滚动条留位置）
-        if (bar.scrollWidth > bar.clientWidth + 1) {
-          bar.classList.add("is-scrollable");
-        }
-        // 修改：场景多时当前项可能在可视区外，切过去后要让它可见，
-        // 否则用户看不到自己选中了哪一个
-        if (activeChip && activeChip.scrollIntoView) {
-          activeChip.scrollIntoView({ block: "nearest", inline: "nearest" });
+
+        // 先完整画一次；溢出就逐步折叠中间段（保留第一段和当前段），直到放下。
+        // 注意要按「实际渲染宽度」判断，而不是只看 scrollWidth——折叠后会重画，
+        // 用最后一组元素的右边缘是否超出容器来定，最可靠。
+        var fits = function () {
+          var barRect = bar.getBoundingClientRect();
+          var kids = bar.children;
+          if (!kids.length) return true;
+          var last = kids[kids.length - 1].getBoundingClientRect();
+          return last.right <= barRect.right + 0.5;
+        };
+        paint(-1, -1);
+        // 至少要有「首 + 中间 + 尾」才能折，即 items.length >= 3
+        if (!fits() && items.length >= 3) {
+          // 折叠区间 [1, collapseTo)：保留第一段和最后一段（当前所在层）
+          // collapseTo 从 2 开始（先折 1 段），逐步扩张
+          for (var collapseTo = 2; collapseTo < items.length; collapseTo++) {
+            paint(1, collapseTo);
+            if (fits()) break;
+          }
         }
         syncToolbarHeight();
+      }
+
+      // 修改：场景下拉。场景是互斥的单选，面包屑只显示当前那个，
+      // 所以点场景段时弹出全部选项（基础 + 所有场景）。
+      function openScenarioMenu(anchor) {
+        var menu = document.getElementById("scenarioMenu");
+        if (!menu) return;
+        menu.innerHTML = "";
+        var items = [{ name: "基础", path: "" }];
+        var list = lastScenarios || [];
+        for (var i = 0; i < list.length; i++) {
+          items.push({ name: list[i], path: "scenarios." + escapeSegment(list[i]) });
+        }
+        for (var j = 0; j < items.length; j++) {
+          (function (item) {
+            var btn = document.createElement("button");
+            btn.className = "menuItem" + (item.path === currentBoard ? " active" : "");
+            btn.innerText = item.name;
+            btn.title = item.name;
+            btn.addEventListener("click", function () {
+              closeScenarioMenu();
+              vscode.postMessage({ command: "selectBoard", board: item.path });
+            });
+            menu.appendChild(btn);
+          })(items[j]);
+        }
+        var r = anchor.getBoundingClientRect();
+        menu.style.left = Math.round(r.left) + "px";
+        menu.style.top = Math.round(r.bottom + 4) + "px";
+        menu.classList.add("open");
+      }
+
+      function closeScenarioMenu() {
+        var menu = document.getElementById("scenarioMenu");
+        if (menu) menu.classList.remove("open");
+      }
+
+      // 修改：与 boardParser.escapeBoardSegment 同一规则——名字含 "." 时加引号，
+      // 否则 d2 会把点当路径分隔符（实测报 render target not found）
+      function escapeSegment(name) {
+        if (name.indexOf(".") < 0) return name;
+        return '"' + name.replace(/"/g, '\\"') + '"';
       }
 
       // 修改：d2 的超链接角标（appendix-icon）渲染在 <a> 外面，与锚点没有
@@ -648,6 +832,20 @@
         });
       }
 
+      // 修改：点空白处或按 Esc 关闭场景下拉。用捕获阶段，
+      // 保证先于按钮自身的 click 处理，避免"点菜单项又被立刻关掉"
+      document.addEventListener("click", function (event) {
+        var menu = document.getElementById("scenarioMenu");
+        if (!menu || !menu.classList.contains("open")) return;
+        if (menu.contains(event.target)) return;
+        if (event.target.closest && event.target.closest("#boardBar .crumb")) return;
+        closeScenarioMenu();
+      }, true);
+
+      document.addEventListener("keydown", function (event) {
+        if (event.key === "Escape") closeScenarioMenu();
+      });
+
       // 修改：三击（或划选到行尾）后粘贴会多出一个换行。原因：d2 的文字节点
       // 里没有行尾空白，选区终点只能落在元素边界上，浏览器序列化时会补一个
       // "\n"（"grill-with-docs\n"），粘贴时于是跳到下一行。这里在复制事件里
@@ -718,27 +916,12 @@
           case "render":
             wrapper.innerHTML = message.data;
 
-            // 修改：刷新左上角场景切换栏（场景列表可能随源码编辑变化）
-            renderBoardBar(message.scenarios, message.board || "");
-            // 修改：场景栏内容变了，工具栏高度可能跟着变，图区要重新对齐
+            // 修改（2026-10-18）：渲染面包屑（替换原场景栏与返回按钮）。
+            // 场景列表可能随源码编辑变化，每次 render 都重画。
+            lastScenarios = message.scenarios || [];
+            lastBoard = message.board || "";
+            renderBreadcrumb(lastScenarios, lastBoard);
             syncToolbarHeight();
-
-            // 修改：board 非空说明渲染的是 layers/scenarios 的子 board，
-            // 显示"返回"按钮；主板则隐藏。backBoard 是历史栈顶（再退一步
-            // 去到的 board），null 表示无历史可退。
-            // 注意显示必须显式设 "inline-block"：CSS 里 #backBtn 有
-            // display:none 规则，style.display="" 只会退回该规则、按钮永不显示
-            var backBtn = document.getElementById("backBtn");
-            if (backBtn) {
-              if (message.board) {
-                backBtn.title = message.backBoard
-                  ? "返回 " + message.backBoard + "（可逐层后退）"
-                  : "返回主板";
-                backBtn.style.display = "inline-block";
-              } else {
-                backBtn.style.display = "none";
-              }
-            }
             // 修改：跳转到不同 board 时是一张全新的图，强制重新 fit，
             // 不沿用旧图的缩放比例和 pan 位置
             var boardSwitched = message.board !== currentBoard;
@@ -857,17 +1040,9 @@
       </button>
       <!-- 修改：场景切换栏（默认空，有场景时由 JS 填充"场景：基础 xxx yyy"） -->
       <span id="boardBar"></span>
-      <!-- 修改：board 跳转的"返回主板"按钮，默认隐藏，进入子 board 后显示（见 #backBtn 样式） -->
-      <button id="backBtn" onclick="navigateBack()" title="返回主板">
-        <svg viewBox="0 -25 122 140">
-          <title>back-to-root</title>
-          <!-- 左向箭头：返回主板 -->
-          <path
-            d="M55.5,12.5 L23.5,44.5 a5,5 0 0 0 0,7 L55.5,83.5 a5,5 0 0 0 8.5,-3.5 L64,60 L98,60 a5,5 0 0 0 5,-5 L103,41 a5,5 0 0 0 -5,-5 L64,36 L64,16 a5,5 0 0 0 -8.5,-3.5 Z"
-          />
-        </svg>
-      </button>
     </div>
+    <!-- 修改（2026-10-18）：场景下拉，点面包屑里的场景段时弹出 -->
+    <div id="scenarioMenu"></div>
     <div id="previewWrapper" style="margin-top: 45px"></div>
     <div id="toast">
       <div id="toastMsg">Loading...</div>

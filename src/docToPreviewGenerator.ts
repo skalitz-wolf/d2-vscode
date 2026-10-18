@@ -20,10 +20,6 @@ export class D2P {
   // 当前预览的 board 路径（"" = 主板）。
   // 编辑触发的自动刷新沿用此值，不会因改图跳回主板；图层跳转时更新
   currentTarget: string = "";
-  // board 跳转历史栈（浏览器式后退）：跳转前把当时的 board 压栈，
-  // "返回"按钮弹栈；新开预览窗口时清空。压栈只在 webview 的角标跳转
-  // 处做（browserWindow.ts），返回跳转本身不压栈，否则永远退不完
-  boardHistory: string[] = [];
   // 顶层场景名列表（boardParser 解析源码所得），随 render 消息发给
   // webview 渲染左上角场景切换栏。场景是整图的变体、不属于任何节点，
   // 不走节点 .link 角标（与图层不同）；无场景时为空数组，场景栏隐藏
@@ -131,7 +127,6 @@ export class DocToPreviewGenerator {
     if (target === undefined && !trkObj.outputDoc && openPreview) {
       boardChanged = trkObj.currentTarget !== "";
       trkObj.currentTarget = "";
-      trkObj.boardHistory = [];
     }
     if (target !== undefined && target !== trkObj.currentTarget) {
       trkObj.currentTarget = target;
