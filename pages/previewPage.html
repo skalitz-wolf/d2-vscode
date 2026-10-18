@@ -582,98 +582,101 @@
         return segs;
       }
 
-      // 修改：面包屑渲染。第一段固定「基础」（root board），其后是路径各段。
-      // 普通文件（无场景无图层）不渲染，避免只剩一个孤零零的「基础」。
-      // 修改：面包屑渲染。第一段固定「基础」（root board），其后是路径各段。
-      // 宽度不够时把中间段折叠成「…」（点它展开），保住头和尾——
-      // 横向滚动会把「基础」滚出视野，反而失去面包屑的意义。
+      // 修改（2026-10-18 重设计）：面包屑 = [场景名] › [图层] › [图层]...
+      //
+      // 规则（用户定的模型）：
+      //   - 场景只能通过下拉切换，图层只能通过图里的角标进入
+      //   - 第一段是「当前场景名」：基础 / 缓存命中 / 缓存未命中 之一
+      //   - 后面是图层链；图层段没有下拉
+      //   - 没有场景时第一段是「基础」，且不显示下拉
+      //
+      // 悬停第一段立即弹菜单；移开 200ms 关闭；点击锁定/解锁。
       function renderBreadcrumb(scenarios, board) {
         var bar = document.getElementById("boardBar");
         if (!bar) return;
         bar.innerHTML = "";
         var segs = splitBoardPath(board);
+        var scenarioSeg = null;
+        var layers = [];
+        for (var i = 0; i < segs.length; i++) {
+          if (segs[i].kind === "scenario" && !scenarioSeg) {
+            scenarioSeg = segs[i];
+          } else if (segs[i].kind === "layer") {
+            layers.push(segs[i]);
+          }
+        }
         var hasScenarios = !!(scenarios && scenarios.length > 0);
-        var hasLayers = segs.some(function (x) { return x.kind === "layer"; });
-        // 普通文件：无场景、无图层，不显示面包屑
-        if (!hasScenarios && !hasLayers) {
+        // 普通文件（无场景无图层）不显示面包屑，避免只剩一个孤零零的「基础」
+        if (!hasScenarios && layers.length === 0) {
           syncToolbarHeight();
           return;
         }
-        var currentPath = board || "";
 
-        // 构建「段」描述：root + 各路径段。collapsed=true 时整段折叠为 …
-        var items = [{ name: "基础", path: "", kind: "root", current: currentPath === "" }];
-        for (var k = 0; k < segs.length; k++) {
-          items.push({
-            name: segs[k].name,
-            path: segs[k].path,
-            kind: segs[k].kind,
-            current: segs[k].path === currentPath,
-          });
-        }
+        // 第一段：当前场景名。没有场景段时就是 root board，名字叫「基础」
+        var scenarioName = scenarioSeg ? scenarioSeg.name : "基础";
+        var scenarioPath = scenarioSeg ? scenarioSeg.path : "";
+        // 当前 board 恰好就是场景本身（还没进图层）时，这一段是"你在这里"
+        var scenarioIsCurrent = !layers.length;
 
-        var paint = function (collapsedFrom, collapsedTo) {
+        var paint = function () {
           bar.innerHTML = "";
-          for (var i = 0; i < items.length; i++) {
-            if (i > 0) {
-              var sep = document.createElement("span");
-              sep.className = "sep";
-              sep.innerText = "›";
-              bar.appendChild(sep);
-            }
-            if (i === collapsedFrom) {
-              // 折叠段：点它恢复完整显示
-              var more = document.createElement("button");
-              more.className = "ellipsis";
-              more.innerText = "…";
-              more.title = "展开中间的 " + (collapsedTo - collapsedFrom) + " 段";
-              (function () {
-                more.addEventListener("click", function () {
-                  paint(-1, -1);
-                });
-              })();
-              bar.appendChild(more);
-              i = collapsedTo - 1;
-              continue;
-            }
-            var item = items[i];
-            var b = document.createElement("button");
-            b.className = "crumb" + (item.current ? " current" : "") +
-              (item.kind === "root" && hasScenarios ? " has-menu" : "");
-            b.innerText = item.name;
-            b.title = item.kind === "scenario" ? "场景：" + item.name
-              : item.kind === "layer" ? "图层：" + item.name
-              : "回到主板";
-            (function (it) {
-              if (it.kind === "scenario") {
-                // 场景段：弹下拉选场景（scenario 互斥，一次只能选一个）
-                b.addEventListener("click", function (event) {
-                  openScenarioMenu(event.currentTarget);
-                });
-              } else if (it.kind === "root" && hasScenarios) {
-                // 修改：在主板时面包屑只有「基础」一段，没有场景段可点，
-                // 用户会以为场景丢了。有场景时让「基础」也承担下拉入口，
-                // 当前就在基础时点它展开场景列表，否则先回基础。
-                b.addEventListener("click", function (event) {
-                  if (it.current) {
-                    openScenarioMenu(event.currentTarget);
-                  } else {
-                    vscode.postMessage({ command: "selectBoard", board: "" });
-                  }
-                });
-              } else if (!it.current) {
-                b.addEventListener("click", function () {
-                  vscode.postMessage({ command: "selectBoard", board: it.path });
-                });
+          var first = document.createElement("button");
+          first.className = "crumb" + (scenarioIsCurrent ? " current" : "") +
+            (hasScenarios ? " has-menu" : "");
+          first.innerText = scenarioName;
+          first.title = hasScenarios ? "切换场景" : "回到主板";
+          first.setAttribute("data-scenario-crumb", "1");
+          if (hasScenarios) {
+            // 悬停即弹；移出延迟关闭，避免鼠标移向菜单时闪
+            first.addEventListener("mouseenter", function (event) {
+              if (!menuLocked) openScenarioMenu(event.currentTarget);
+            });
+            first.addEventListener("mouseleave", function () {
+              scheduleCloseMenu();
+            });
+            first.addEventListener("click", function (event) {
+              // 点击锁定：锁定时再次点击解锁并关闭
+              if (menuLocked) {
+                menuLocked = false;
+                closeScenarioMenu();
+              } else {
+                menuLocked = true;
+                openScenarioMenu(event.currentTarget);
               }
-            })(item);
-            bar.appendChild(b);
+            });
+          } else if (!scenarioIsCurrent) {
+            first.addEventListener("click", function () {
+              vscode.postMessage({ command: "selectBoard", board: "" });
+            });
+          }
+          bar.appendChild(first);
+
+          // 图层链：只有当前 board 的最后一段是"你在这里"，其余可点回退
+          for (var k = 0; k < layers.length; k++) {
+            var sep = document.createElement("span");
+            sep.className = "sep";
+            sep.innerText = "›";
+            bar.appendChild(sep);
+            var seg = layers[k];
+            var isLast = k === layers.length - 1;
+            var lb = document.createElement("button");
+            lb.className = "crumb" + (isLast ? " current" : "");
+            lb.innerText = seg.name;
+            lb.title = "图层：" + seg.name;
+            if (!isLast) {
+              (function (targetPath) {
+                lb.addEventListener("click", function () {
+                  vscode.postMessage({ command: "selectBoard", board: targetPath });
+                });
+              })(seg.path);
+            }
+            bar.appendChild(lb);
           }
         };
 
-        // 先完整画一次；溢出就逐步折叠中间段（保留第一段和当前段），直到放下。
-        // 注意要按「实际渲染宽度」判断，而不是只看 scrollWidth——折叠后会重画，
-        // 用最后一组元素的右边缘是否超出容器来定，最可靠。
+        paint();
+
+        // 宽度不够时折叠中间图层段（保留第一段与最后一段）
         var fits = function () {
           var barRect = bar.getBoundingClientRect();
           var kids = bar.children;
@@ -681,37 +684,123 @@
           var last = kids[kids.length - 1].getBoundingClientRect();
           return last.right <= barRect.right + 0.5;
         };
-        paint(-1, -1);
-        // 至少要有「首 + 中间 + 尾」才能折，即 items.length >= 3
-        if (!fits() && items.length >= 3) {
-          // 折叠区间 [1, collapseTo)：保留第一段和最后一段（当前所在层）
-          // collapseTo 从 2 开始（先折 1 段），逐步扩张
-          for (var collapseTo = 2; collapseTo < items.length; collapseTo++) {
-            paint(1, collapseTo);
-            if (fits()) break;
-          }
+        if (!fits() && layers.length > 2) {
+          // 折掉中间图层：只保留第一段、第一个和最后一个图层
+          var keep = [layers[0], layers[layers.length - 1]];
+          var collapsed = true;
+          var paintCollapsed = function () {
+            bar.innerHTML = "";
+            var first = document.createElement("button");
+            first.className = "crumb" + (scenarioIsCurrent ? " current" : "") +
+              (hasScenarios ? " has-menu" : "");
+            first.innerText = scenarioName;
+            first.title = hasScenarios ? "切换场景" : "回到主板";
+            first.setAttribute("data-scenario-crumb", "1");
+            if (hasScenarios) {
+              first.addEventListener("mouseenter", function (event) {
+                if (!menuLocked) openScenarioMenu(event.currentTarget);
+              });
+              first.addEventListener("mouseleave", function () {
+                scheduleCloseMenu();
+              });
+              first.addEventListener("click", function (event) {
+                if (menuLocked) {
+                  menuLocked = false;
+                  closeScenarioMenu();
+                } else {
+                  menuLocked = true;
+                  openScenarioMenu(event.currentTarget);
+                }
+              });
+            } else if (!scenarioIsCurrent) {
+              first.addEventListener("click", function () {
+                vscode.postMessage({ command: "selectBoard", board: "" });
+              });
+            }
+            bar.appendChild(first);
+            for (var k = 0; k < keep.length; k++) {
+              var sep = document.createElement("span");
+              sep.className = "sep";
+              sep.innerText = "›";
+              bar.appendChild(sep);
+              if (k === 1) {
+                var more = document.createElement("button");
+                more.className = "ellipsis";
+                more.innerText = "…";
+                more.title = "展开中间的图层";
+                more.addEventListener("click", function () {
+                  collapsed = false;
+                  paint();
+                });
+                bar.appendChild(more);
+                var sep2 = document.createElement("span");
+                sep2.className = "sep";
+                sep2.innerText = "›";
+                bar.appendChild(sep2);
+              }
+              var seg = keep[k];
+              var isLast = k === keep.length - 1;
+              var lb = document.createElement("button");
+              lb.className = "crumb" + (isLast ? " current" : "");
+              lb.innerText = seg.name;
+              lb.title = "图层：" + seg.name;
+              if (!isLast) {
+                (function (targetPath) {
+                  lb.addEventListener("click", function () {
+                    vscode.postMessage({ command: "selectBoard", board: targetPath });
+                  });
+                })(seg.path);
+              }
+              bar.appendChild(lb);
+            }
+          };
+          paintCollapsed();
         }
         syncToolbarHeight();
       }
 
-      // 修改：场景下拉。场景是互斥的单选，面包屑只显示当前那个，
-      // 所以点场景段时弹出全部选项（基础 + 所有场景）。
+      // 修改：场景下拉。场景是互斥的单选，选项固定为「基础 + 所有顶层场景」。
+      // 只有第一段（场景名）会打开它，图层段没有下拉。
+      var menuLocked = false;
+      var menuCloseTimer = null;
       function openScenarioMenu(anchor) {
         var menu = document.getElementById("scenarioMenu");
         if (!menu) return;
+        if (menuCloseTimer) {
+          clearTimeout(menuCloseTimer);
+          menuCloseTimer = null;
+        }
         menu.innerHTML = "";
         var items = [{ name: "基础", path: "" }];
         var list = lastScenarios || [];
         for (var i = 0; i < list.length; i++) {
           items.push({ name: list[i], path: "scenarios." + escapeSegment(list[i]) });
         }
+        // 修改：高亮当前场景。currentBoard 可能是 scenarios.X.layers.Y，
+        // 不能直接和 item.path 比；取路径里的场景段来比。
+        var currentScenarioPath = "";
+        var curSegs = splitBoardPath(currentBoard);
+        for (var ci = 0; ci < curSegs.length; ci++) {
+          if (curSegs[ci].kind === "scenario") {
+            currentScenarioPath = curSegs[ci].path;
+            break;
+          }
+        }
         for (var j = 0; j < items.length; j++) {
           (function (item) {
             var btn = document.createElement("button");
-            btn.className = "menuItem" + (item.path === currentBoard ? " active" : "");
+            btn.className = "menuItem" + (item.path === currentScenarioPath ? " active" : "");
             btn.innerText = item.name;
             btn.title = item.name;
+            btn.addEventListener("mouseenter", function () {
+              // 鼠标进入菜单后取消关闭计时，允许移过去点
+              if (menuCloseTimer) {
+                clearTimeout(menuCloseTimer);
+                menuCloseTimer = null;
+              }
+            });
             btn.addEventListener("click", function () {
+              menuLocked = false;
               closeScenarioMenu();
               vscode.postMessage({ command: "selectBoard", board: item.path });
             });
@@ -724,11 +813,24 @@
         menu.classList.add("open");
       }
 
+      // 修改：延迟关闭 200ms——鼠标从面包屑移向菜单的途中不闪
+      function scheduleCloseMenu() {
+        if (menuLocked) return;
+        if (menuCloseTimer) clearTimeout(menuCloseTimer);
+        menuCloseTimer = setTimeout(function () {
+          menuCloseTimer = null;
+          closeScenarioMenu();
+        }, 200);
+      }
+
       function closeScenarioMenu() {
         var menu = document.getElementById("scenarioMenu");
         if (menu) menu.classList.remove("open");
+        if (menuCloseTimer) {
+          clearTimeout(menuCloseTimer);
+          menuCloseTimer = null;
+        }
       }
-
       // 修改：与 boardParser.escapeBoardSegment 同一规则——名字含 "." 时加引号，
       // 否则 d2 会把点当路径分隔符（实测报 render target not found）
       function escapeSegment(name) {
