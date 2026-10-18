@@ -1,0 +1,35 @@
+# 短链服务组件库
+# 本文件不单独成图，供其他 .d2 通过 @ 导入复用
+
+AntURL 短链: {
+  shape: rectangle
+  label: |md
+    #### AntURL 短链
+    jxlife-cornerstone-anturl
+  |
+
+  "UrlShortServiceImpl.parse()": {
+    shape: rectangle
+    label: |md
+      #### parse() 解析短链
+      - POST /api/v1/parse
+      - 入参: channel, shortUrl
+      - 出参: fullUrl, expTime
+    |
+  }
+
+  "UrlShortServiceImpl.generate()": {
+    shape: rectangle
+    label: |md
+      #### generate() 生成短链
+      - POST /api/v1/generate
+    |
+  }
+}
+
+BBox 百宝箱: {
+  label: |md
+    #### BBox 百宝箱
+    服务链配置: serviceNumber=3536, domainUrl
+  |
+}

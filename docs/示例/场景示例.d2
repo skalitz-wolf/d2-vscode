@@ -1,0 +1,33 @@
+# 场景示例（scenarios）：同一张基础图的不同变体
+# 与 layers 的区别：每个场景都继承主板内容，再叠加自己的差异（加节点/加连线/改样式）
+# 适合表达"同一流程的不同分支结果"
+# 插件预览（--target=）只显示主板；看场景用 CLI：
+#   d2 场景示例.d2 out                        → 渲染成目录（index + 每个场景一个 SVG）
+#   d2 场景示例.d2 --target=scenarios.短链失效 - → 只渲染某个场景
+
+# ── 基础图（所有场景共享）──
+调用方: {shape: person; label: 短链使用方}
+网关: {label: Sggate 统一网关}
+AntURL: {label: AntURL 短链}
+
+调用方 -> 网关: GET 短链
+网关 -> AntURL: 解析短链
+
+# 场景是整图的变体、不属于任何节点，不挂节点 .link：
+# 预览时用左上角的场景栏切换（基础 / 短链有效 / 短链失效）
+
+scenarios: {
+  短链有效: {
+    # 继承基础图，只补充"有效"分支
+    AntURL -> 网关: "data={fullUrl, expTime}" {style.stroke-dash: 4}
+    网关 -> 调用方: 302 Location: fullUrl {style.stroke-dash: 4}
+  }
+
+  短链失效: {
+    # 继承基础图，补充"失效"分支
+    失效页: {label: invalidTimeError.html 链接失效}
+    AntURL -> 网关: "data=null（未找到/过期/channel 不匹配）" {style.stroke-dash: 4}
+    网关 -> 失效页: 302 {style.stroke-dash: 4}
+    失效页 -> 调用方: 展示"链接地址已过期" {style.stroke-dash: 4}
+  }
+}
