@@ -1,0 +1,28 @@
+# 公共组件库：存储类组件
+# 本文件不单独成图，供其他 .d2 通过 @ 导入复用
+
+Redis 短链缓存: {
+  shape: cylinder
+  label: |md
+    #### Redis 短链缓存
+    - key: anturl:{MD5(完整短链)}
+    - TTL = min(有效期, 14 天)
+  |
+}
+
+MySQL url_short: {
+  shape: cylinder
+  label: |md
+    #### MySQL url_short
+    - short_code / short_url_md5 / channel
+    - full_url / expiration_time
+  |
+}
+
+MongoDB sg_ant_log: {
+  shape: cylinder
+  label: |md
+    #### MongoDB sg_ant_log
+    - 短链访问日志
+  |
+}

@@ -1,0 +1,58 @@
+# 图层示例（layers）：主板总览 + 每个关注点一个图层下钻
+# 主板看整体，layers 里是各组件内部细节；每个 board 是一张独立的完整图
+# 插件预览（--target=）只显示主板；看图层用 CLI：
+#   d2 图层示例.d2 out                      → 渲染成目录（index + 每层一个 SVG）
+#   d2 图层示例.d2 --target=layers.Sggate 内部 -  → 只渲染某一层
+
+# ── 主板：总览 ──
+调用方: {shape: person; label: 短链使用方}
+Nginx: {label: Nginx 10.1.143.69}
+Sggate: {label: Sggate 统一网关}
+AntURL: {label: AntURL 短链}
+
+调用方 -> Nginx: GET 短链
+Nginx -> Sggate: 转发
+Sggate -> AntURL: 解析短链
+AntURL -> Sggate: fullUrl / null {style.stroke-dash: 4}
+Sggate -> 调用方: 302 重定向 {style.stroke-dash: 4}
+
+# link 让节点可点击跳转到对应图层（CLI 渲染成目录后 SVG 间可跳转）
+Sggate.link: layers.Sggate 内部
+AntURL.link: layers.AntURL 内部
+
+layers: {
+  Sggate 内部: {
+    "CustomRedirectFilter.filter()": {
+      label: |md
+        #### CustomRedirectFilter.filter()
+        - 请求解析短链接口
+        - data ≠ null 且未过期 → 302 fullUrl
+        - 否则 → 302 失效页
+      |
+    }
+    routeToInvalidTimePage(): {
+      label: |md
+        #### routeToInvalidTimePage()
+        - invalidTimeError.html
+        - 文案取 redis / sg_configuration
+      |
+    }
+    "CustomRedirectFilter.filter()" -> routeToInvalidTimePage(): 失效或未找到时 302 {style.stroke-dash: 4}
+  }
+
+  AntURL 内部: {
+    "parse() 解析": {
+      label: |md
+        #### UrlShortServiceImpl.parse()
+        - POST /api/v1/parse
+        - 出参: fullUrl, expTime
+      |
+    }
+    "generate() 生成": {
+      label: |md
+        #### UrlShortServiceImpl.generate()
+        - POST /api/v1/generate
+      |
+    }
+  }
+}

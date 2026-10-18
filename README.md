@@ -152,9 +152,7 @@ Syntax file used for markdown embedded within d2 block strings.
    gsed -i -E 's/\[ \]\{[^}]*?\}/\\\\s*/' markdown.tmLanguage.json
    ```
 
-- This replacement ensures that the markdown syntax doesn't consider leading spaces to be
-  the beginning of an indented code block as in d2, block strings are indented for
-  readability without the indentation being part of the string contents.
+1. This replacement ensures that the markdown syntax doesn't consider leading spaces to be the beginning of an indented code block as in d2, block strings are indented for readability without the indentation being part of the string contents.
 
 5. Now delete the `list` from `#block`. Lists for some reason eat the block string
    terminator. e.g. with them enabled the following syntax after the terminating `|`

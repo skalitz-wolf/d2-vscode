@@ -1,0 +1,33 @@
+# 导入图层示例（layers + @ 导入）：图层内容来自其他 .d2 文件
+# 与 图层示例.d2 的区别：图层不再在本文件手写，而是从 组件/ 库文件导入
+# 导入路径相对本文件、不带 .d2 后缀；"." 连到目标节点表示只导入该节点（选择性导入）
+# 插件预览（--target=）只显示主板；看图层用 CLI：
+#   d2 导入图层示例.d2 out                            → 渲染成目录（index + 每层一个 SVG）
+#   d2 导入图层示例.d2 --target=layers.AntURL 内部 -  → 只渲染导入的那一层
+
+# ── 主板：总览 ──
+调用方: {shape: person; label: 短链使用方}
+网关: {label: Sggate 统一网关}
+AntURL: {label: AntURL 短链}
+存储: {label: 缓存 / 数据库 / 日志}
+
+调用方 -> 网关: GET 短链
+网关 -> AntURL: 解析短链
+AntURL -> 存储: 读写 {style.stroke-dash: 4}
+
+# link 让节点可点击跳转到对应图层（插件预览点角标跳转；目录渲染的 SVG 间整框可点）
+AntURL.link: layers.AntURL 内部
+存储.link: layers.存储组件
+
+layers: {
+  # 整文件导入：短链服务.d2 的全部内容直接成为这一层的图
+  AntURL 内部: @组件/短链服务
+
+  # 选择性导入拼装：只取 公共组件.d2 里需要的节点，本层再补自己的连线
+  存储组件: {
+    缓存: @组件/公共组件.Redis 短链缓存
+    数据库: @组件/公共组件.MySQL url_short
+    日志库: @组件/公共组件.MongoDB sg_ant_log
+    缓存 -> 数据库: 未命中回源
+  }
+}
