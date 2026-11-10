@@ -2,7 +2,7 @@ import * as path from "path";
 import * as os from "os";
 import { existsSync } from "fs";
 import { outputChannel, ws } from "./extension";
-import { window } from "vscode";
+import { window, workspace } from "vscode";
 import { spawnSync } from "child_process";
 
 /**
@@ -73,6 +73,34 @@ class Utility {
         break;
       }
     }
+  }
+
+  /**
+   * openPreviewLink - 处理预览里的文件类链接（.link 非 root.* 的分支）。
+   * 网址交默认浏览器（调用方返回后 VS Code 兑职）；相对路径基于预览文档
+   * 所在目录解析；能打开成文本就用编辑器打开，否则用默认应用。
+   * 主窗口预览（browserWindow）与预览浮窗（popoutPreview）共用。
+   */
+  openPreviewLink(link: string, baseDir: string): void {
+    const f = link.toLowerCase();
+    if (f.startsWith("http://") || f.startsWith("https://")) {
+      return;
+    }
+    const isRelative = (p: string) => !/^([a-z]+:)?[\\/]/i.test(p);
+    const filepath = isRelative(f) ? path.join(baseDir, link) : link;
+    workspace.openTextDocument(filepath).then(
+      (document) => {
+        // we opened the document, now show it.
+        window.showTextDocument(document);
+      },
+      () => {
+        if (!existsSync(filepath)) {
+          window.showErrorMessage(`File does not exist: ${filepath}`);
+        } else {
+          this.openWithDefaultApp(filepath);
+        }
+      },
+    );
   }
 
   /**

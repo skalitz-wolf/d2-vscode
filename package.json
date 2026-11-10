@@ -103,6 +103,15 @@
     "markdown.markdownItPlugins": true,
     "commands": [
       {
+        "command": "D2.OpenPreviewPopout",
+        "title": "D2",
+        "category": "d2",
+        "icon": {
+          "light": "./resources/d2-light.svg",
+          "dark": "./resources/d2-dark.svg"
+        }
+      },
+      {
         "command": "D2.ShowPreviewWindow",
         "title": "Show D2 Preview",
         "category": "d2"
@@ -246,6 +255,11 @@
     "menus": {
       "commandPalette": [
         {
+          "command": "D2.OpenPreviewPopout",
+          "when": "editorLangId == d2",
+          "group": "d2"
+        },
+        {
           "command": "D2.ShowPreviewWindow",
           "when": "editorLangId == d2",
           "group": "d2"
@@ -334,6 +348,11 @@
         }
       ],
       "editor/title": [
+        {
+          "command": "D2.OpenPreviewPopout",
+          "when": "resourceLangId == d2",
+          "group": "navigation@1"
+        },
         {
           "command": "D2.ShowPreviewWindow",
           "when": "resourceLangId == d2",

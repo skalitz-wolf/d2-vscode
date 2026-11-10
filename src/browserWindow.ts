@@ -1,6 +1,6 @@
-import { existsSync, readFileSync } from "fs";
+import { readFileSync } from "fs";
 import * as path from "path";
-import { Uri, ViewColumn, Webview, WebviewPanel, window, workspace } from "vscode";
+import { Uri, ViewColumn, Webview, WebviewPanel, window } from "vscode";
 import { D2P } from "./docToPreviewGenerator";
 import { extContext, previewGenerator } from "./extension";
 import { util } from "./utility";
@@ -80,8 +80,6 @@ export class BrowserWindow {
       }
     });
 
-    const isRelative = (p: string) => !/^([a-z]+:)?[\\/]/i.test(p);
-
     this.webViewPanel.webview.onDidReceiveMessage(
       (message) => {
         switch (message.command) {
@@ -106,33 +104,8 @@ export class BrowserWindow {
               return;
             }
 
-            const f = link.toLowerCase();
-            const isWeb: boolean = f.startsWith("http://") || f.startsWith("https://");
-            const ir = isRelative(f);
-
-            // if it's a website, we can let the default handler deal with it
-            // by falling out of this function.
-            if (isWeb) {
-              return;
-            }
-
-            // We have a file, or something that looks like a file, try to open it,
-            // let vscode decide if it's possible.
-            const filepath = ir ? path.join(filePath, link) : link;
-
-            workspace.openTextDocument(filepath).then(
-              (document) => {
-                // we opened the document, now show it.
-                window.showTextDocument(document);
-              },
-              () => {
-                if (!existsSync(filepath)) {
-                  window.showErrorMessage(`File does not exist: ${filepath}`);
-                } else {
-                  util.openWithDefaultApp(filepath);
-                }
-              },
-            );
+            // 网址与文件链接统一交给 util（网址在其中直接返回，交默认浏览器处理）
+            util.openPreviewLink(link, filePath);
             break;
           }
           case "selectBoard": {

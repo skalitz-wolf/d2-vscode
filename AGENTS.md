@@ -19,13 +19,14 @@
 
 ## 关键文件
 
-| 文件 | 职责 |
-|---|---|
-| `src/extension.ts` | 注册命令、监听文档事件 |
-| `src/tasks.ts` | 调 d2 CLI：`compile()`（stdin→SVG）、`compileBinary()`（stdin→位图）、`format()` |
-| `src/docToPreviewGenerator.ts` / `src/browserWindow.ts` | 预览面板中间层 / WebviewPanel 包装 |
-| `src/boardParser.ts` | 解析 d2 源码顶层 layers/scenarios 一级键名（深度扫描，容错），供场景栏使用 |
-| `pages/previewPage.html` | 预览页交互（拖拽、缩放、Fit），JS 用 `var` 是历史风格 |
+| 文件                                                    | 职责                                                                                                                                                               |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `src/extension.ts`                                      | 注册命令、监听文档事件                                                                                                                                             |
+| `src/tasks.ts`                                          | 调 d2 CLI：`compile()`（stdin→SVG）、`compileBinary()`（stdin→位图）、`format()`                                                                                   |
+| `src/docToPreviewGenerator.ts` / `src/browserWindow.ts` | 预览面板中间层 / WebviewPanel 包装                                                                                                                                 |
+| `src/popoutPreview.ts`                                  | 预览浮窗：单面板 + webview 内页签，与主窗口预览完全分离；取舍见 `docs/adr/0001-self-owned-preview-popout.md`，术语见 `GLOSSARY.md`（preview popout / preview tab） |
+| `src/boardParser.ts`                                    | 解析 d2 源码顶层 layers/scenarios 一级键名（深度扫描，容错），供场景栏使用                                                                                         |
+| `pages/previewPage.html`                                | 预览页交互（拖拽、缩放、Fit），JS 用 `var` 是历史风格                                                                                                              |
 
 ## 深度研究文档
 

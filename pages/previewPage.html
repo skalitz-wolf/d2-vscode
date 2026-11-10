@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <title>Diagram</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -6,13 +6,22 @@
 
   <head>
     <style>
-      #toolbar {
+      /* 修改：新增 topChrome 容器——工具栏与（浮窗模式的）页签条一起固定在顶部。
+         toolbarHeight() 实测该容器高度写入图区 marginTop，
+         页签条出现/消失都不会盖住图的上沿 */
+      #topChrome {
         z-index: 100;
         position: fixed;
         left: 0px;
         top: 0px;
+        width: 100%;
+      }
+
+      #toolbar {
         background-color: var(--vscode-sideBar-background);
-        padding-left: 15px;
+        /* 修改：原 15px 是上游装饰性留白，与功能无关；收到 4px
+           只留贴窗边的一点呼吸感，需要完全贴零可改 0 */
+        padding-left: 4px;
         /* 修改：返回按钮已删除（回根靠场景下拉里的「基础」项），
            右侧不再需要预留槽位 */
         padding-right: 15px;
@@ -198,6 +207,61 @@
         text-decoration: none;
       }
 
+      /* 修改：预览浮窗的页签条并入工具栏同一行（两行太占地方）。
+         非浮窗模式 display:none；浮窗模式 body.popout 时为一行 chip。
+         flex:0 1 auto + min-width:0：页签多时自己横向滚动，
+         把剩余空间留给面包屑自己折叠。状态全在扩展端，webview 只是哑 UI */
+      #tabBar {
+        display: none;
+        flex: 0 1 auto;
+        min-width: 0;
+        margin-top: 3px;
+        padding: 0 2px;
+        overflow-x: auto;
+        overflow-y: hidden;
+        white-space: nowrap;
+        scrollbar-width: thin;
+      }
+
+      body.popout #tabBar {
+        display: flex;
+        align-items: center;
+      }
+
+      #tabBar .tab {
+        flex: 0 0 auto;
+        display: flex;
+        align-items: center;
+        max-width: 18em;
+        padding: 2px 4px 2px 8px;
+        margin: 0 2px;
+        border-radius: 4px;
+        font-size: 12px;
+        cursor: pointer;
+        background-color: var(--vscode-tab-inactiveBackground);
+        color: var(--vscode-tab-inactiveForeground);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      #tabBar .tab.active {
+        background-color: var(--vscode-tab-activeBackground);
+        color: var(--vscode-tab-activeForeground);
+        font-weight: 600;
+        outline: 1px solid var(--vscode-tab-border);
+      }
+
+      #tabBar .tab .close {
+        flex: 0 0 auto;
+        margin-left: 6px;
+        padding: 0 4px;
+        border-radius: 3px;
+      }
+
+      #tabBar .tab .close:hover {
+        background-color: var(--vscode-toolbar-hoverBackground);
+      }
 
       /* 段之间的分隔符，纯装饰，不可点 */
       #boardBar .sep {
@@ -281,6 +345,14 @@
       var toolbarEl;
       var busyIndicator;
       var toast, toastMsg, toastList;
+      // 修改：预览浮窗模式标记，由扩展端装载 HTML 时替换占位符静态注入。
+      // 不能用 postMessage 传：浮窗被分离到新 OS 窗口后 webview JS 上下文
+      // 会重置，postMessage 的初始状态会丢，占位符不会
+      var popoutMode = /*__POPOUT__*/ false;
+      // 浮窗多页签：当前页签 id 与各页签的缩放/平移状态缓存（页签切换时存取）
+      var currentTabId = null;
+      var tabZoomState = {};
+      var chromeEl;
       var fitMode = true;
       // 修改：当前渲染的 board 路径（空串 = 主板）。board 变化时强制重新 fit
       var currentBoard = "";
@@ -312,7 +384,10 @@
       // margin-top:45px，而工具栏实际高度会随场景栏滚动条变化；两者脱钩后
       // 工具栏一旦超过 45px 就会盖住图的上沿。这里实测一次，写进 marginTop，
       // 同时把值暴露给 zoomFit/zoomFitBoth 复用，避免各处再写死数字
+      // 修改：工具栏高度是图区定位的唯一真源。浮窗模式下工具栏下面
+      // 可能还有页签条，所以优先实测整个 topChrome 容器的高度
       function toolbarHeight() {
+        if (chromeEl) return chromeEl.getBoundingClientRect().height || 45;
         if (!toolbarEl) return 45;
         return toolbarEl.getBoundingClientRect().height || 45;
       }
@@ -327,6 +402,7 @@
       function init() {
         percent = document.getElementById("percent");
         toolbarEl = document.getElementById("toolbar");
+        chromeEl = document.getElementById("topChrome");
         wrapper = document.getElementById("previewWrapper");
         busyIndicator = document.getElementById("progressBar");
         toast = document.getElementById("toast");
@@ -375,13 +451,73 @@
         // 初始 HTML 中写死的 "Loading..." 提示与进度条，避免脏状态残留
         toast.style.opacity = 0;
         busyIndicator.style.visibility = "hidden";
+        // 浮窗模式：点亮页签条（CSS 由 body.popout 驱动）
+        if (popoutMode) {
+          document.body.classList.add("popout");
+        }
+        // 修改：实测部分环境下外层因素会把 fixed 的包含块破坏成
+        // "随文档滚动"，导致顶栏滚动时消失。自适应钉顶：首次发现
+        // "scrollY>0 且顶栏已被滚成负数"时判定 fixed 失效，此后常驻
+        // translateY(scrollY) 反向补偿；fixed 正常时永不进入该分支，
+        // 零副作用。不能每次滚动都重新计算：钉住后 top 回到 0，
+        // 再据此清除 transform 会把整行顶出屏幕且无事件再拉回（振荡）
+        var chromePinned = false;
+        window.addEventListener(
+          "scroll",
+          function () {
+            if (!chromeEl) return;
+            if (!chromePinned) {
+              chromePinned =
+                window.scrollY > 0 && chromeEl.getBoundingClientRect().top < 0;
+              return;
+            }
+            chromeEl.style.transform = "translateY(" + window.scrollY + "px)";
+          },
+          { passive: true },
+        );
+      }
+
+      // 修改：浮窗页签条渲染。tabs 由扩展端 setTabs 消息驱动（id/label/active），
+      // 点击切换页签、× 关闭；消息都发回扩展端，webview 不持有页签状态
+      function renderTabs(tabs) {
+        if (!popoutMode) return;
+        var bar = document.getElementById("tabBar");
+        if (!bar) return;
+        bar.innerHTML = "";
+        var list = tabs || [];
+        for (var i = 0; i < list.length; i++) {
+          (function (t) {
+            var tab = document.createElement("div");
+            tab.className = "tab" + (t.active ? " active" : "");
+            tab.title = t.label;
+            var label = document.createElement("span");
+            label.className = "label";
+            label.innerText = t.label;
+            tab.appendChild(label);
+            var closeBtn = document.createElement("span");
+            closeBtn.className = "close";
+            closeBtn.innerText = "×";
+            closeBtn.title = "关闭页签";
+            closeBtn.addEventListener("click", function (e) {
+              e.stopPropagation();
+              vscode.postMessage({ command: "closeTab", id: t.id });
+            });
+            tab.appendChild(closeBtn);
+            tab.addEventListener("click", function () {
+              vscode.postMessage({ command: "activateTab", id: t.id });
+            });
+            bar.appendChild(tab);
+          })(list[i]);
+        }
+        // 页签条宽度变化会挤压同行末尾的面包屑，重新折叠一次
+        renderBreadcrumb(lastScenarios, lastBoard);
       }
       // 修改：anchorX/anchorY 用于"以鼠标位置为中心缩放"。若未传入，
       // 默认使用最近一次鼠标位置；若 lastMouseX/Y 仍为 0，则退化为以视口中心缩放
       function zoomPlus(anchorX, anchorY) {
         if (typeof anchorX !== "number") {
-          anchorX = (lastMouseX || visualViewport.width / 2);
-          anchorY = (lastMouseY || visualViewport.height / 2);
+          anchorX = lastMouseX || visualViewport.width / 2;
+          anchorY = lastMouseY || visualViewport.height / 2;
         }
         if (zoomLevel >= 50) {
           zoomStep = 10;
@@ -390,8 +526,8 @@
       }
       function zoomMinus(anchorX, anchorY) {
         if (typeof anchorX !== "number") {
-          anchorX = (lastMouseX || visualViewport.width / 2);
-          anchorY = (lastMouseY || visualViewport.height / 2);
+          anchorX = lastMouseX || visualViewport.width / 2;
+          anchorY = lastMouseY || visualViewport.height / 2;
         }
         if (zoomLevel <= 50) {
           zoomStep = 5;
@@ -511,7 +647,15 @@
       // 这样 pan 不会因为缩放比例变化而被二次放大
       function applyTransform(zl) {
         wrapper.style.transform =
-          "translate(" + panX + "px," + panY + "px) scale(" + zl / 100 + "," + zl / 100 + ")";
+          "translate(" +
+          panX +
+          "px," +
+          panY +
+          "px) scale(" +
+          zl / 100 +
+          "," +
+          zl / 100 +
+          ")";
       }
       function setZoomText(text) {
         percent.innerText = zoomLevel.toFixed() + "%";
@@ -525,7 +669,6 @@
       function refreshPage() {
         vscode.postMessage({ command: "refreshPage" });
       }
-
 
       // 修改（2026-10-18）：把 board 路径切成面包屑的段。
       // 路径形如 scenarios.A.layers.B.layers.C；按关键字切，紧随其后的名字是段名。
@@ -564,7 +707,11 @@
               raw = kw + "." + name;
             }
             acc = acc ? acc + "." + raw : raw;
-            segs.push({ name: name, path: acc, kind: kw === "scenarios" ? "scenario" : "layer" });
+            segs.push({
+              name: name,
+              path: acc,
+              kind: kw === "scenarios" ? "scenario" : "layer",
+            });
             i = next;
             continue;
           }
@@ -736,7 +883,8 @@
         for (var j = 0; j < items.length; j++) {
           (function (item) {
             var btn = document.createElement("button");
-            btn.className = "menuItem" + (item.path === currentScenarioPath ? " active" : "");
+            btn.className =
+              "menuItem" + (item.path === currentScenarioPath ? " active" : "");
             btn.innerText = item.name;
             btn.title = item.name;
             btn.addEventListener("click", function () {
@@ -851,7 +999,7 @@
               },
               function () {
                 done(copyViaExecCommand(text));
-              }
+              },
             );
             return;
           }
@@ -915,7 +1063,6 @@
         });
       }
 
-
       // 修改：三击（或划选到行尾）后粘贴会多出一个换行。原因：d2 的文字节点
       // 里没有行尾空白，选区终点只能落在元素边界上，浏览器序列化时会补一个
       // "\n"（"grill-with-docs\n"），粘贴时于是跳到下一行。这里在复制事件里
@@ -960,7 +1107,7 @@
             }
           }
         },
-        { passive: false }
+        { passive: false },
       );
 
       // 修改：window 级 mousemove，保证鼠标移出 wrapper 边界时也能继续拖动
@@ -984,6 +1131,32 @@
 
         switch (message.command) {
           case "render":
+            // 修改：浮窗多页签时，先把当前页签的缩放/平移状态存入缓存，
+            // 再恢复目标页签的；主窗口预览不带 tabId，这段直接跳过，行为不变。
+            // 恢复的是 zoomLevel/panX/panY/fitMode 四件套，配合扩展端
+            // preserveZoom=true 的 render 分支（applyTransform）完成还原
+            if (
+              message.tabId !== undefined &&
+              currentTabId !== null &&
+              currentTabId !== message.tabId
+            ) {
+              tabZoomState[currentTabId] = {
+                zoomLevel: zoomLevel,
+                panX: panX,
+                panY: panY,
+                fitMode: fitMode,
+              };
+            }
+            if (message.tabId !== undefined) {
+              var saved = tabZoomState[message.tabId];
+              if (saved) {
+                zoomLevel = saved.zoomLevel;
+                panX = saved.panX;
+                panY = saved.panY;
+                fitMode = saved.fitMode;
+              }
+              currentTabId = message.tabId;
+            }
             wrapper.innerHTML = message.data;
 
             // 修改（2026-10-18）：先更新 currentBoard 再画面包屑。
@@ -1034,6 +1207,9 @@
             setZoomLevel(100.0);
             setZoomText(true);
             break;
+          case "setTabs":
+            renderTabs(message.tabs);
+            break;
         }
       });
 
@@ -1056,14 +1232,15 @@
           // 修改：单击 SVG 文字即复制该文字元素的整行内容（角标优先，见上）。
           // 选择器限定在 #previewWrapper 内，避免工具栏里将来出现 <text> 时误触发。
           // 已有非折叠选区说明用户刚划选过，此时不复制、不覆盖选区
-          const textEl = event.target.closest && event.target.closest("#previewWrapper text");
+          const textEl =
+            event.target.closest && event.target.closest("#previewWrapper text");
           if (!textEl) return;
           const sel = window.getSelection ? window.getSelection() : null;
           // 只在确知存在选区时跳过：isCollapsed 缺失（个别环境）不当作有选区
           if (sel && sel.isCollapsed === false) return;
           copyTextElement(textEl);
         },
-        false
+        false,
       );
     </script>
   </head>
@@ -1090,7 +1267,9 @@
         <svg viewBox="0 -25 122 140">
           <title>fit-width</title>
           <!-- 横向左右双箭头 + 中间矩形示意"按宽度适配" -->
-          <path d="M 18 50 L 18 70 L 32 70 L 32 64 L 24 64 L 24 56 L 32 56 L 32 50 Z M 104 50 L 104 56 L 112 56 L 112 64 L 104 64 L 104 70 L 90 70 L 90 50 Z M 44 56 L 78 56 L 78 64 L 44 64 Z" />
+          <path
+            d="M 18 50 L 18 70 L 32 70 L 32 64 L 24 64 L 24 56 L 32 56 L 32 50 Z M 104 50 L 104 56 L 112 56 L 112 64 L 104 64 L 104 70 L 90 70 L 90 50 Z M 44 56 L 78 56 L 78 64 L 44 64 Z"
+          />
         </svg>
       </button>
       <!-- 修改：原 Zoom to Fit 按钮改名为"Fit Both"——按宽高较小值缩放并居中显示 -->
@@ -1109,6 +1288,9 @@
           />
         </svg>
       </button>
+      <!-- 修改：浮窗页签条并入同一行（非浮窗模式隐藏）；必须放在 boardBar 之前，
+           否则 flex:1 的面包屑会把页签条挤到最右边 -->
+      <div id="tabBar"></div>
       <!-- 修改：面包屑（默认空，有场景/图层时由 JS 填充，如「缓存命中 › 存储细节」） -->
       <span id="boardBar"></span>
     </div>

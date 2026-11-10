@@ -18,6 +18,7 @@ import {
 } from "vscode";
 
 import { DocToPreviewGenerator } from "./docToPreviewGenerator";
+import { popoutPreview } from "./popoutPreview";
 import { D2OutputChannel } from "./outputChannel";
 import * as mdItContainer from "markdown-it-container";
 import { layoutPicker } from "./layoutPicker";
@@ -54,6 +55,8 @@ export function activate(context: ExtensionContext): VSCAny {
         ws.get("previewTheme") !== wsOld.get("previewTheme") ||
         ws.get("previewSketch") !== wsOld.get("previewSketch")
       ) {
+        // 预览设置影响所有浮窗页签的渲染结果，全部重编译
+        popoutPreview.compileAll();
         const activeEditor = window.activeTextEditor;
         if (activeEditor?.document.languageId === d2Ext) {
           previewGenerator.generate(activeEditor.document);
@@ -70,6 +73,8 @@ export function activate(context: ExtensionContext): VSCAny {
         if (autoUp) {
           const trk = previewGenerator.getTrackObject(e.document);
           trk?.timer?.reset();
+          // 预览浮窗页签独立刷新（与主窗口预览互不影响，见 ADR 0001）
+          popoutPreview.refresh(e.document);
         }
       }
     }),
@@ -94,8 +99,12 @@ export function activate(context: ExtensionContext): VSCAny {
         const trk = previewGenerator.getTrackObject(doc);
 
         // If we don't have preview window open, then no need to update it
-        if (updateOnSave && hardSave && trk?.outputDoc) {
-          previewGenerator.generate(doc);
+        if (updateOnSave && hardSave) {
+          if (trk?.outputDoc) {
+            previewGenerator.generate(doc);
+          }
+          // 预览浮窗：文档有页签就刷新，与主窗口预览互不影响
+          popoutPreview.compileNow(doc);
         }
 
         hardSave = false;
@@ -115,6 +124,8 @@ export function activate(context: ExtensionContext): VSCAny {
     workspace.onDidCloseTextDocument((doc: TextDocument) => {
       if (doc.languageId === d2Ext) {
         previewGenerator.deleteObjectToTrack(doc);
+        // 文档关了，浮窗里的页签随之关闭
+        popoutPreview.removeTab(doc);
       }
     }),
   );
@@ -131,6 +142,19 @@ export function activate(context: ExtensionContext): VSCAny {
       }
     }),
   );
+
+  // 预览浮窗：d2 编辑器标题栏按钮入口，从源码直达（见 ADR 0001）
+  context.subscriptions.push(
+    commands.registerCommand("D2.OpenPreviewPopout", () => {
+      const activeEditor = window.activeTextEditor;
+      if (activeEditor?.document.languageId === d2Ext) {
+        popoutPreview.open(activeEditor.document);
+      }
+    }),
+  );
+
+  // 扩展卸载时销毁浮窗面板
+  context.subscriptions.push(popoutPreview);
 
   context.subscriptions.push(
     commands.registerCommand("D2.CompileToSvg", (fileInfo) => {
